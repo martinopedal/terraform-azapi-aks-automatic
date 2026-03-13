@@ -216,11 +216,11 @@ AKS Automatic supports three ingress options. All use the **Kubernetes Gateway A
 
 #### Application Gateway for Containers (Gateway API, L7)
 
-> **Limitation (as of March 2026):** AGC frontends do **not** support private IP addresses. Frontends only expose a public FQDN. This means AGC is **not suitable for ALZ Corp / private-only ingress** where no public endpoints are permitted. There is no committed ETA from Microsoft for private IP frontend support. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
+> **Limitation (as of March 2026):** AGC frontends do **not** support private IP addresses. Frontends only expose a public FQDN. Private IP frontend support is expected but has no committed ETA. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
 >
-> For ALZ Corp scenarios requiring fully private ingress, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode** instead.
+> For ALZ Corp scenarios requiring fully private ingress today, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode**.
 
-AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. When private IP frontend support is added, it will become the recommended Corp ingress option.
+AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. Once private IP frontend support ships, AGC will be the recommended Corp ingress option due to its WAF, mTLS, and traffic splitting capabilities.
 
 ```
 Client -> AGC Public Frontend -> ALB Controller -> Pods
@@ -380,9 +380,11 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Deployment Safeguards | Azure Policy, Warning mode | No (severity adjustable via Policy) |
 | Defender for Containers | Optional | Yes - `securityProfile.defender` |
 | Azure Key Vault KMS | Optional | Yes - `securityProfile.azureKeyVaultKms` |
-| Custom CA trust certs | Optional, up to 10 | Yes - `securityProfile.customCATrustCertificates` |
+| Custom CA trust certs | Optional, up to 10 | Conditional - see caveat below |
 | Private cluster | Optional | Yes - `enable_private_cluster` |
 | Authorised IP ranges | Optional | Yes - `authorized_ip_ranges` |
+
+> **Custom CA trust certificates + NAP caveat:** On AKS versions prior to v20260408 (February 2026), `securityProfile.customCATrustCertificates` is silently ignored on nodes provisioned by NAP/Karpenter. Since AKS Automatic exclusively uses NAP, custom CA certs will not be applied to any nodes unless the cluster is running AKS >= v20260408. Verify your cluster version before relying on this setting. See [GitHub issue #5353](https://github.com/Azure/AKS/issues/5353).
 
 ### Monitoring and Observability
 
@@ -467,7 +469,7 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 | Monitoring | Prometheus, Container Insights, Managed Grafana |
 | Scaling | KEDA, VPA, HPA, autoscaler profile |
 | Storage | Disk/File/Blob CSI drivers, snapshot controller |
-| Security | Defender, Key Vault KMS, CA trust certs, image cleaner interval |
+| Security | Defender, Key Vault KMS, image cleaner interval, CA trust certs (requires AKS >= v20260408 for NAP) |
 | Node customisation | Karpenter `NodePool` / `AKSNodeClass` CRDs post-deployment |
 
 ---
