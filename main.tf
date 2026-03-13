@@ -29,6 +29,9 @@ resource "azapi_resource" "aks" {
   parent_id = azapi_resource.rg.id
   tags      = local.tags
 
+  # SystemAssigned is the default for this module. If you set a custom
+  # privateDNSZone resource ID for a private cluster, AKS requires a
+  # UserAssigned managed identity plus the corresponding identity resource ID.
   identity {
     type = "SystemAssigned"
   }
@@ -56,8 +59,6 @@ resource "azapi_resource" "aks" {
         {
           name         = "systempool"
           mode         = "System"
-          count        = 3
-          vmSize       = "Standard_DS4_v2"
           osType       = "Linux"
           osSKU        = "AzureLinux"
           vnetSubnetID = local.node_subnet_id # null → managed VNet
@@ -111,7 +112,7 @@ resource "azapi_resource" "aks" {
             ingressGateways = [
               {
                 enabled = true
-                mode    = "External"
+                mode    = "Internal"
               }
             ]
           }
@@ -119,6 +120,7 @@ resource "azapi_resource" "aks" {
       } : null
 
       # ----- Security -----------------------------------------------------------
+      # Image Cleaner defaults to a 7-day (168 hour) interval per AKS docs.
       securityProfile = {
         workloadIdentity = {
           enabled = true
