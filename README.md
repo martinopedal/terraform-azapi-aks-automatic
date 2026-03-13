@@ -95,7 +95,7 @@ flowchart TB
             AzFW["Azure Firewall Premium\nAzureKubernetesService FQDN tag\n10.0.1.4"]
             Bastion["Azure Bastion"]
         end
-        PrivDNS["Private DNS Zones\nprivatelink.region.azmk8s.io\nprivatelink.azurecr.io\nprivatelink.vaultcore.azure.net\napp.contoso.corp"]
+        PrivDNS["Private DNS Zones\nprivate.region.azmk8s.io\n(VNet-integrated private cluster)\nprivatelink.azurecr.io\nprivatelink.vaultcore.azure.net\napp.contoso.corp"]
     end
 
     subgraph MgmtSub["Management Subscription"]
@@ -157,7 +157,7 @@ flowchart TB
 |---|---|---|---|
 | 1-2 | **Ingress** | Corp User -> ExpressRoute -> Hub -> Peering -> AGC Private Frontend -> ALB Controller -> Pods | All private, no public IP |
 | 3-4 | **Egress** | Pods -> UDR -> Hub Azure Firewall -> Internet | FQDN-filtered via `AzureKubernetesService` tag |
-| 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> Private API Server | VNet-integrated, private FQDN only |
+| 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> Private API Server | VNet-integrated ILB; private cluster FQDN: `<cluster>.private.<region>.azmk8s.io` |
 | 6 | **PaaS access** | Pods -> Private Endpoints (ACR, Key Vault, SQL, Storage) | Workload Identity authentication |
 | 7 | **DNS** | On-prem DNS -> Conditional Forwarder -> Hub Private DNS Zones | Resolves all private endpoints |
 | 8 | **Monitoring** | AKS -> Managed Prometheus + Container Insights -> Log Analytics | Central management subscription |
@@ -485,7 +485,8 @@ Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
       Pods (overlay: 10.244.0.0/16, services: 10.245.0.0/16)
 
   snet-aks-apiserver     10.10.4.0/28    Delegated: Microsoft.ContainerService/managedClusters
-    K8s API Server (private FQDN, VNet integrated)
+    K8s API Server (VNet integrated ILB; FQDN: <cluster>-<hash>.<region>.azmk8s.io)
+    Private cluster adds privatelink prefix to FQDN
 
   snet-agc               10.10.8.0/24    Delegated: Microsoft.ServiceNetworking/trafficControllers
     Application Gateway for Containers (private frontend)
@@ -540,15 +541,38 @@ ALZ enforces centralised IP address management (IPAM). The default CIDRs in this
 
 ### Private DNS Zone Management
 
-AKS Automatic with private cluster enabled uses a private FQDN requiring a `privatelink.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet.
+AKS Automatic always uses **API Server VNet Integration**. The API server runs behind an internal load balancer (ILB) injected directly into the delegated API server subnet. This is not the legacy Private Link-based model.
 
-In ALZ, Private DNS Zones are hosted in the **connectivity subscription** and managed by the platform team. This module must not create duplicate zones.
+DNS resolution depends on whether the cluster is public or private:
 
-**Implementation guidance:**
+| Mode | FQDN format | Resolves to | Private DNS Zone |
+|---|---|---|---|
+| Public | `<cluster>-<hash>.<region>.azmk8s.io` | Public IP | Not required |
+| Private | `<cluster>-<hash>.private.<region>.azmk8s.io` | ILB private IP in API server subnet | `private.<region>.azmk8s.io` |
 
-- For private API server: the platform team must create the `privatelink.<region>.azmk8s.io` zone and link it to both hub and spoke VNets.
-- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `DNS Zone Contributor` on those zones, which is a cross-subscription RBAC assignment handled by the platform team or a separate Terraform configuration.
+In both modes, nodes communicate with the API server via the ILB private IP directly, bypassing DNS entirely. The DNS zone is only relevant for out-of-cluster clients (kubectl, CI/CD pipelines, on-premises users).
+
+The `privateDNSZone` property (ARM) / `--private-dns-zone` flag (CLI) controls zone creation for private clusters:
+
+| Setting | Behaviour |
+|---|---|
+| `system` (default) | AKS creates a `private.<region>.azmk8s.io` zone in the node resource group, linked to the cluster VNet only. |
+| `none` | No zone created. API server reachable only via public FQDN (if public access is also enabled). |
+| `<resource-id>` | Use a pre-created zone in e.g. the ALZ connectivity subscription. Format: `private.<region>.azmk8s.io`. |
+
+**Implementation guidance for ALZ hub-spoke:**
+
+- Use `privateDNSZone = "<resource-id>"` pointing to a pre-created `private.<region>.azmk8s.io` zone in the connectivity subscription. The zone must be linked to both hub and spoke VNets.
+- The cluster managed identity requires `Private DNS Zone Contributor` and `Network Contributor` on the zone.
+- On-premises DNS servers need a conditional forwarder for `private.<region>.azmk8s.io` to Azure DNS (`168.63.129.16`) via the hub.
+- For public VNet-integrated clusters: no Private DNS Zone is needed. Restrict external access using `authorized_ip_ranges`.
+- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `DNS Zone Contributor` on those zones.
 - For AGC frontends: add a CNAME in the appropriate Private DNS Zone pointing to the generated `*.appgw.azure.com` FQDN.
+
+**Sources:**
+- [API Server VNet Integration](https://learn.microsoft.com/azure/aks/api-server-vnet-integration) - ILB-based model, DNS behaviour, public/private toggle
+- [Private AKS clusters](https://learn.microsoft.com/azure/aks/private-clusters) - `privateDNSZone` options, hub-spoke DNS configuration
+- [AKS Automatic private cluster quickstart](https://learn.microsoft.com/azure/aks/automatic/quick-automatic-private-custom-network) - Identity and subnet requirements
 
 ### Egress Through Hub Firewall
 

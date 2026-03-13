@@ -80,14 +80,16 @@ resource "azapi_resource" "aks" {
       }
 
       # ----- API server access --------------------------------------------------
-      # VNet integration is preconfigured. When using BYO VNet, the dedicated
-      # API server subnet must be provided. Private cluster and IP whitelisting
-      # are optional.
+      # AKS Automatic always uses VNet Integration. The API server is an ILB
+      # in the delegated subnet, not a Private Link endpoint.
+      # Private cluster mode disables public DNS and requires a
+      # private.<region>.azmk8s.io DNS zone for out-of-cluster resolution.
       apiServerAccessProfile = {
         enableVnetIntegration          = true
-        subnetId                       = local.apiserver_subnet_id # null → managed VNet
+        subnetId                       = local.apiserver_subnet_id # null -> managed VNet
         enablePrivateCluster           = var.enable_private_cluster
         enablePrivateClusterPublicFQDN = var.enable_private_cluster ? false : null
+        privateDNSZone                 = var.enable_private_cluster ? (var.private_dns_zone_id != null ? var.private_dns_zone_id : "system") : null
         authorizedIPRanges             = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
       }
 

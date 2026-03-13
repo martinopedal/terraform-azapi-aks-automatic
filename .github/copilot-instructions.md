@@ -90,7 +90,7 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
 
 ### DNS – Private DNS zones
 
-- AKS Automatic with API server VNet integration uses the **private FQDN** (when `enable_private_cluster = true`) which requires a `privatelink.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet.
+- AKS Automatic always uses API Server VNet Integration. The API server is an ILB in the delegated subnet, not a Private Endpoint. When `enable_private_cluster = true`, the FQDN becomes `<cluster>-<hash>.private.<region>.azmk8s.io` (note: `private.`, not `privatelink.` -- the `privatelink.` zone is the legacy non-VNet-integrated model). This requires a `private.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet. Without private cluster, no Private DNS Zone is needed for API server access.
 - In ALZ, Private DNS Zones are typically hosted in the **connectivity subscription** and managed by the platform team. Do **not** create duplicate Private DNS Zones in the spoke.
 - For Application Routing DNS integration, the `dns_zone_resource_ids` variable must point to zones the platform team has pre-created. The AKS managed identity needs `DNS Zone Contributor` on those zones – this is a **cross-subscription RBAC assignment** that must be handled by the ALZ platform team or a separate Terraform state.
 

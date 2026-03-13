@@ -165,13 +165,25 @@ variable "enable_service_mesh" {
 # =============================================================================
 
 variable "enable_private_cluster" {
-  description = "When true, the API server is only accessible via private endpoint."
+  description = "When true, the API server is accessible only via the VNet-integrated ILB private IP. Public DNS entries are removed."
   type        = bool
   default     = false
 }
 
+variable "private_dns_zone_id" {
+  description = <<-EOT
+    Resource ID of a pre-created private DNS zone for the private API server FQDN.
+    Only used when enable_private_cluster = true.
+      - null (default) : AKS creates a private.<region>.azmk8s.io zone in the node resource group (privateDNSZone = "system").
+      - "<resource-id>": Use a pre-created zone, e.g. in the ALZ connectivity subscription. Format: private.<region>.azmk8s.io.
+      - "none"         : No private DNS zone. API server reachable only if public access is also enabled.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "authorized_ip_ranges" {
-  description = "CIDR ranges authorised to access the API server. Ignored when private cluster is enabled."
+  description = "CIDR ranges authorised to access the API server. Only applies to the public endpoint; ignored when private cluster is enabled."
   type        = list(string)
   default     = []
 }
