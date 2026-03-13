@@ -1011,6 +1011,148 @@ AKS Automatic does not provide built-in backup. Consider:
 - Use **Spot VMs** via Karpenter NodePool (`karpenter.sh/capacity-type: spot`) for fault-tolerant workloads to reduce cost
 - The `metricsProfile.costAnalysis` property can be enabled for detailed per-resource cost breakdown in Azure Cost Management
 
+### Workload Identity Federation
+
+AKS Automatic preconfigures Workload Identity and OIDC Issuer. To allow a pod to authenticate to Azure services (ACR, Key Vault, Storage, SQL) without secrets, create a federated identity credential:
+
+```bash
+# 1. Create a user-assigned managed identity for the workload
+az identity create --name mi-my-app --resource-group rg-aks-automatic --location swedencentral
+
+# 2. Create a Kubernetes service account annotated with the identity client ID
+kubectl create serviceaccount my-app-sa --namespace my-app
+kubectl annotate serviceaccount my-app-sa --namespace my-app \
+  azure.workload.identity/client-id="<managed-identity-client-id>"
+
+# 3. Create the federated identity credential linking K8s SA to Entra ID
+az identity federated-credential create \
+  --name fic-my-app \
+  --identity-name mi-my-app \
+  --resource-group rg-aks-automatic \
+  --issuer "$(terraform output -raw oidc_issuer_url)" \
+  --subject "system:serviceaccount:my-app:my-app-sa" \
+  --audiences "api://AzureADTokenExchange"
+
+# 4. Grant the managed identity access to target resources
+az role assignment create --role "Storage Blob Data Reader" \
+  --assignee "<managed-identity-client-id>" \
+  --scope "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<sa>"
+```
+
+Pods using this service account with the `azure.workload.identity/use: "true"` label will automatically receive an Entra ID token without any secrets in the cluster.
+
+### GitOps with Flux
+
+AKS supports the [Flux v2 GitOps extension](https://learn.microsoft.com/azure/azure-arc/kubernetes/conceptual-gitops-flux2) as a managed add-on. Deploy it after cluster creation:
+
+```bash
+az k8s-extension create --cluster-name aks-automatic-corp \
+  --resource-group rg-aks-automatic \
+  --cluster-type managedClusters \
+  --extension-type microsoft.flux \
+  --name flux
+
+# Create a Flux configuration pointing to your Git repository
+az k8s-configuration flux create \
+  --cluster-name aks-automatic-corp \
+  --resource-group rg-aks-automatic \
+  --cluster-type managedClusters \
+  --name cluster-config \
+  --namespace flux-system \
+  --scope cluster \
+  --url "https://github.com/<org>/<repo>" \
+  --branch main \
+  --kustomization name=infra path=./clusters/corp prune=true
+```
+
+For private clusters, the Flux extension communicates with the Azure API (not the Git server directly from the cluster). If the Git repository is private (GitHub Enterprise, Azure DevOps), configure an SSH deploy key or PAT via `--ssh-private-key-file` or `--https-user`/`--https-key`.
+
+### Cilium Network Policy Operations
+
+AKS Automatic uses Cilium as the network policy engine. Standard Kubernetes `NetworkPolicy` resources work out of the box. For advanced L3/L4/L7 control, use `CiliumNetworkPolicy` CRDs:
+
+```yaml
+# Example: restrict egress from the app namespace to only ACR and Key Vault
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: restrict-egress
+  namespace: my-app
+spec:
+  endpointSelector: {}
+  egress:
+    - toFQDNs:
+        - matchPattern: "*.azurecr.io"
+        - matchPattern: "*.vaultcore.azure.net"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toCIDR:
+        - 10.245.0.0/16   # K8s services
+```
+
+FQDN-based egress filtering requires ACNS (Advanced Container Networking Services) to be enabled. Standard Cilium network policies (L3/L4 only) work without ACNS.
+
+### Azure Policy Exemptions
+
+AKS Automatic enables Deployment Safeguards via Azure Policy. ALZ may assign additional policies at the management group level. When policies conflict with AKS system pods (e.g. privilege escalation restrictions on kube-system pods), create exemptions:
+
+```bash
+# List policy assignments on the AKS subscription
+az policy assignment list --scope /subscriptions/<sub-id> --query "[].{name:name, displayName:displayName}" -o table
+
+# Create an exemption for a specific assignment on the AKS resource
+az policy exemption create \
+  --name "aks-system-pods" \
+  --policy-assignment "<assignment-id>" \
+  --exemption-category "Mitigated" \
+  --scope "/subscriptions/<sub>/resourceGroups/rg-aks-automatic/providers/Microsoft.ContainerService/managedClusters/aks-automatic-corp" \
+  --description "AKS system pods require privileges not permitted by this policy"
+```
+
+Common exemptions needed for AKS Automatic:
+- `Kubernetes clusters should not allow container privilege escalation` (kube-system components)
+- `Kubernetes cluster should not allow privileged containers` (system DaemonSets)
+- NSG rule policies that conflict with AKS-injected rules
+
+### Planned Maintenance Windows
+
+AKS Automatic clusters auto-upgrade. Control the timing via maintenance configurations:
+
+```bash
+# Set a weekly maintenance window for cluster upgrades (Sunday 02:00-06:00 UTC)
+az aks maintenanceconfiguration add \
+  --cluster-name aks-automatic-corp \
+  --resource-group rg-aks-automatic \
+  --name aksManagedAutoUpgradeSchedule \
+  --schedule-type Weekly \
+  --day-of-week Sunday \
+  --start-time 02:00 \
+  --duration 4
+
+# Set a separate window for node OS upgrades
+az aks maintenanceconfiguration add \
+  --cluster-name aks-automatic-corp \
+  --resource-group rg-aks-automatic \
+  --name aksManagedNodeOSUpgradeSchedule \
+  --schedule-type Weekly \
+  --day-of-week Saturday \
+  --start-time 02:00 \
+  --duration 4
+```
+
+Allow at least 30 minutes between creating a maintenance configuration and the scheduled start time for AKS to reconcile.
+
+### Certificate and Credential Rotation
+
+- **TLS certificates (App Routing):** When using Key Vault integration, certificates are automatically rotated by the App Routing add-on. Upload the renewed certificate to Key Vault and the add-on picks it up.
+- **Workload Identity tokens:** Automatically managed by the Entra ID federated credential mechanism. No manual rotation needed.
+- **Cluster certificates:** AKS manages internal cluster certificate rotation. No operator action required.
+- **ACR tokens:** When using AcrPull via managed identity, no credentials to rotate. If using image pull secrets (not recommended), rotate them via Key Vault or external secret management.
+
 ---
 
 ## Regional Availability and Limitations

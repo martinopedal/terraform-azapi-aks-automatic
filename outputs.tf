@@ -42,6 +42,16 @@ output "oidc_issuer_url" {
   value       = azapi_resource.aks.output.properties.oidcIssuerProfile.issuerURL
 }
 
+output "kubelet_identity_object_id" {
+  description = "Object ID of the kubelet managed identity (used for AcrPull, storage access)."
+  value       = azapi_resource.aks.output.properties.identityProfile.kubeletidentity.objectId
+}
+
+output "app_routing_identity_object_id" {
+  description = "Object ID of the App Routing add-on managed identity (used for Key Vault Certificate User, DNS Zone Contributor)."
+  value       = try(azapi_resource.aks.output.properties.ingressProfile.webAppRouting.identity.objectId, null)
+}
+
 # =============================================================================
 # Networking
 # =============================================================================
