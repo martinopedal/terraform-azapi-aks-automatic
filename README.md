@@ -79,7 +79,13 @@ In AKS Automatic, many features that are optional in Standard become **preconfig
 
 ### ALZ Corp Architecture Diagram
 
-The following diagram shows AKS Automatic deployed in an ALZ Corp spoke subscription with private connectivity. An editable DrawIO source is available at [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio) ([open in diagrams.net](https://app.diagrams.net/#Uhttps%3A%2F%2Fraw.githubusercontent.com%2Fmartinopedal%2Fterraform-azapi-aks-automatic%2Fmain%2Fdocs%2Falz-corp-aks-automatic.drawio)).
+The following diagrams show AKS Automatic deployed in an ALZ Corp spoke subscription with private connectivity. The SVG diagram below renders directly on GitHub. The editable DrawIO source is at [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio) ([open in diagrams.net](https://app.diagrams.net/#Uhttps%3A%2F%2Fraw.githubusercontent.com%2Fmartinopedal%2Fterraform-azapi-aks-automatic%2Fmain%2Fdocs%2Falz-corp-aks-automatic.drawio)).
+
+#### Detailed Architecture
+
+![ALZ Corp - AKS Automatic Architecture](docs/alz-corp-aks-automatic.drawio.svg)
+
+#### Schematic Traffic Flows
 
 ```mermaid
 flowchart TB
@@ -95,13 +101,13 @@ flowchart TB
             AzFW["Azure Firewall Premium\nAzureKubernetesService FQDN tag\n10.0.1.4"]
             Bastion["Azure Bastion"]
         end
-        PrivDNS["Private DNS Zones\nprivate.region.azmk8s.io\n(VNet-integrated private cluster)\nprivatelink.azurecr.io\nprivatelink.vaultcore.azure.net\napp.contoso.corp"]
+        PrivDNS["Private DNS Zones\nprivate.region.azmk8s.io\nprivatelink.azurecr.io\nprivatelink.vaultcore.azure.net\napp.contoso.corp"]
     end
 
     subgraph MgmtSub["Management Subscription"]
         LA["Log Analytics Workspace"]
         Prom["Managed Prometheus"]
-        Grafana["Managed Grafana"]
+        Grafana["Azure Monitor Dashboards\n+ Managed Grafana optional"]
     end
 
     subgraph AppLZ["Application Landing Zone Corp"]
@@ -110,15 +116,11 @@ flowchart TB
                 subgraph AKS["AKS Automatic\nsku:Automatic tier:Standard"]
                     Preconfig["CNI Overlay + Cilium\nWorkload Identity + OIDC\nAzure RBAC + Image Cleaner\nDeployment Safeguards"]
                     NAP["Karpenter NAP\nSystem + User NodePools\nKEDA + VPA + HPA"]
-                    IngressCtrl["App Routing NGINX\n(Ingress API)\nIstio Gateway (optional)"]
+                    IngressCtrl["App Routing NGINX\nInternal LB\nIstio Gateway optional"]
                     Pods["Workload Pods\n10.244.0.0/16"]
                 end
             end
-            APISnet["snet-aks-apiserver 10.10.4.0/28\nDelegated to ContainerService\nPrivate API Server"]
-            subgraph AGCSnet["snet-agc 10.10.8.0/24\nDelegated to ServiceNetworking"]
-                AGC["App Gateway for Containers\nGateway API + WAF"]
-                AGCFrontend["Public Frontend"]
-            end
+            APISnet["snet-aks-apiserver 10.10.4.0/28\nDelegated: ContainerService\nAPI Server VNet-integrated ILB"]
             subgraph PESnet["snet-private-endpoints 10.10.12.0/24"]
                 ACR["ACR"]
                 KV["Key Vault"]
@@ -127,6 +129,7 @@ flowchart TB
             end
         end
         NodeRG["Node Resource Group - ReadOnly\nVMSS + LBs + Managed Disks"]
+        AGCNote["AGC: not yet available\non AKS Automatic\nPublic frontend only"]
     end
 
     Internet(("Internet"))
@@ -134,17 +137,17 @@ flowchart TB
     OnPrem ===|"ExpressRoute"| ERGW
     HubVNet <-->|"VNet Peering"| SpokeVNet
 
-    CorpUser -->|"1 HTTPS private\n(internal LB)"| IngressCtrl
-    AGCFrontend -.->|"public only\n(no private IP yet)"| AGC
+    CorpUser -->|"1 HTTPS private\nvia internal LB"| IngressCtrl
+    IngressCtrl -->|"2 Route to pods"| Pods
 
     Pods -.->|"3 UDR 0.0.0.0/0"| AzFW
     AzFW -->|"4 FQDN filtered"| Internet
 
-    DevOps -.->|"5 Private API"| APISnet
+    DevOps -.->|"5 Private API\nvia ER + peering"| APISnet
 
-    Pods -.->|"6 Private Endpoints"| PESnet
+    Pods -.->|"6 Private Endpoints\nWorkload Identity"| PESnet
 
-    OnPremDNS -.->|"7 Conditional fwd"| PrivDNS
+    OnPremDNS -.->|"7 Conditional fwd\n168.63.129.16"| PrivDNS
 
     AKS -.->|"8 Metrics + Logs"| Prom
     AKS -.->|"8"| LA
@@ -154,12 +157,12 @@ flowchart TB
 
 | # | Flow | Path | Notes |
 |---|---|---|---|
-| 1-2 | **Ingress (Corp)** | Corp User -> ExpressRoute -> Hub -> Peering -> Internal LB -> App Routing (NGINX) -> Pods | Fully private via internal LB. AGC not viable for Corp until private IP frontend ships. |
+| 1-2 | **Ingress (Corp)** | Corp User -> ExpressRoute -> Hub -> Peering -> Internal LB -> App Routing (NGINX) -> Pods | Fully private via internal LB. AGC not viable until add-on + private IP ship. |
 | 3-4 | **Egress** | Pods -> UDR -> Hub Azure Firewall -> Internet | FQDN-filtered via `AzureKubernetesService` tag |
-| 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> Private API Server | VNet-integrated ILB; private cluster FQDN: `<cluster>.private.<region>.azmk8s.io` |
-| 6 | **PaaS access** | Pods -> Private Endpoints (ACR, Key Vault, SQL, Storage) | Workload Identity authentication |
-| 7 | **DNS** | On-prem DNS -> Conditional Forwarder -> Hub Private DNS Zones | Resolves all private endpoints |
-| 8 | **Monitoring** | AKS -> Managed Prometheus + Container Insights -> Log Analytics | Central management subscription |
+| 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> API Server ILB | VNet-integrated; private cluster uses `private.<region>.azmk8s.io` DNS zone |
+| 6 | **PaaS access** | Pods -> Private Endpoints (ACR, Key Vault, SQL, Storage) | Workload Identity authentication, no public access |
+| 7 | **DNS** | On-prem DNS -> Conditional Forwarder (168.63.129.16) -> Hub Private DNS Zones | Resolves all private endpoints + API server FQDN |
+| 8 | **Monitoring** | AKS -> Managed Prometheus + Container Insights -> Log Analytics | Central management subscription. Azure Monitor Dashboards built-in, Managed Grafana optional. |
 
 ---
 
@@ -204,8 +207,8 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** with eBPF-based data 
 | Load balancer SKU | `standard` | No |
 | API server VNet integration | Enabled | No |
 | Pod CIDR | Default `10.244.0.0/16` | Yes - `networkProfile.podCidr` |
-| Service CIDR | Default `10.0.0.0/16` | Yes - `networkProfile.serviceCidr` |
-| DNS service IP | Auto-assigned | Yes - `networkProfile.dnsServiceIP` |
+| Service CIDR | Default `10.245.0.0/16` (module default) | Yes - `networkProfile.serviceCidr` |
+| DNS service IP | Default `10.245.0.10` (module default) | Yes - `networkProfile.dnsServiceIP` |
 | VNet | Managed (auto-created) | Yes - BYO VNet supported |
 | Outbound type | `managedNATGateway` | Yes - see [Egress](#egress) |
 | Service mesh | Not enabled | Yes - `serviceMeshProfile` for Istio |

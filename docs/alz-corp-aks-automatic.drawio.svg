@@ -1,0 +1,687 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="1800px" height="600px" viewBox="-0.5 -0.5 1800 600" content="&lt;mxfile host=&quot;app.diagrams.net&quot; modified=&quot;2026-03-13T09:20:00.000Z&quot; agent=&quot;Copilot&quot; version=&quot;24.0.0&quot; type=&quot;device&quot;&gt;
+  &lt;diagram id=&quot;alz-corp-aks-automatic&quot; name=&quot;ALZ Corp - AKS Automatic&quot;&gt;
+    &lt;mxGraphModel dx=&quot;2200&quot; dy=&quot;1400&quot; grid=&quot;1&quot; gridSize=&quot;10&quot; guides=&quot;1&quot; tooltips=&quot;1&quot; connect=&quot;1&quot; arrows=&quot;1&quot; fold=&quot;1&quot; page=&quot;1&quot; pageScale=&quot;1&quot; pageWidth=&quot;2800&quot; pageHeight=&quot;1800&quot; math=&quot;0&quot; shadow=&quot;0&quot;&gt;
+      &lt;root&gt;
+        &lt;mxCell id=&quot;0&quot; /&gt;
+        &lt;mxCell id=&quot;1&quot; parent=&quot;0&quot; /&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TITLE --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;title&quot; value=&quot;&amp;lt;b&amp;gt;AKS Automatic in ALZ Corp (Private Connectivity)&amp;lt;/b&amp;gt;&amp;#xa;Egress forced through hub Azure Firewall via UDR. Ingress via App Routing internal LB.&quot; style=&quot;text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=0;fontSize=14;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;700&quot; y=&quot;15&quot; width=&quot;900&quot; height=&quot;45&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- ON-PREMISES --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;onprem-boundary&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;dashed=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;30&quot; y=&quot;200&quot; width=&quot;180&quot; height=&quot;520&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;onprem-label&quot; value=&quot;&amp;lt;b&amp;gt;On-Premises&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=center;fontSize=12;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;55&quot; y=&quot;210&quot; width=&quot;130&quot; height=&quot;20&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;onprem-user&quot; value=&quot;Corp User /&amp;#10;Browser&quot; style=&quot;shape=mxgraph.azure.user;fillColor=#505050;fontColor=#333333;strokeColor=none;fontSize=9;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;90&quot; y=&quot;260&quot; width=&quot;40&quot; height=&quot;50&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;onprem-dns&quot; value=&quot;On-Prem DNS&amp;#10;(cond. forwarder)&quot; style=&quot;shape=mxgraph.azure.dns;fillColor=#505050;fontColor=#333333;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;80&quot; y=&quot;380&quot; width=&quot;50&quot; height=&quot;50&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;onprem-lob&quot; value=&quot;LoB App&amp;#10;(API consumer)&quot; style=&quot;shape=mxgraph.azure.cloud;fillColor=#505050;fontColor=#333333;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;75&quot; y=&quot;500&quot; width=&quot;60&quot; height=&quot;45&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;onprem-devops&quot; value=&quot;DevOps&amp;#10;engineer&amp;#10;(kubectl)&quot; style=&quot;shape=mxgraph.azure.user;fillColor=#505050;fontColor=#333333;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;90&quot; y=&quot;610&quot; width=&quot;40&quot; height=&quot;50&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- CONNECTIVITY SUBSCRIPTION – HUB --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;hub-sub&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;260&quot; y=&quot;80&quot; width=&quot;430&quot; height=&quot;760&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-sub-label&quot; value=&quot;&amp;lt;b&amp;gt;Connectivity Subscription (Platform)&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=center;fontSize=12;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;85&quot; width=&quot;300&quot; height=&quot;20&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;mxCell id=&quot;hub-vnet&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;280&quot; y=&quot;115&quot; width=&quot;390&quot; height=&quot;540&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-vnet-label&quot; value=&quot;&amp;lt;b&amp;gt;Hub VNet&amp;lt;/b&amp;gt;  10.0.0.0/16&quot; style=&quot;text;html=1;align=center;fontSize=11;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;370&quot; y=&quot;118&quot; width=&quot;180&quot; height=&quot;18&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- GatewaySubnet --&gt;
+        &lt;mxCell id=&quot;hub-gw-snet&quot; value=&quot;&amp;lt;b&amp;gt;GatewaySubnet&amp;lt;/b&amp;gt;  10.0.0.0/27&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=9;verticalAlign=top;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;300&quot; y=&quot;145&quot; width=&quot;170&quot; height=&quot;75&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-ergw&quot; value=&quot;ExpressRoute&amp;#10;Gateway&quot; style=&quot;shape=mxgraph.azure.vpn_gateway;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;345&quot; y=&quot;168&quot; width=&quot;50&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- AzureFirewallSubnet --&gt;
+        &lt;mxCell id=&quot;hub-fw-snet&quot; value=&quot;&amp;lt;b&amp;gt;AzureFirewallSubnet&amp;lt;/b&amp;gt;  10.0.1.0/26&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=9;verticalAlign=top;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;300&quot; y=&quot;240&quot; width=&quot;350&quot; height=&quot;100&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-fw&quot; value=&quot;Azure Firewall&amp;#10;(Premium)&amp;#10;+ AzureKubernetesService&amp;#10;  FQDN tag&quot; style=&quot;shape=mxgraph.azure.azure_firewall;fillColor=#E83123;fontColor=#FFFFFF;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;395&quot; y=&quot;260&quot; width=&quot;55&quot; height=&quot;55&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-fw-ip&quot; value=&quot;Private IP&amp;#10;10.0.1.4&quot; style=&quot;text;html=1;align=center;fontSize=7;fontColor=#E83123;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;460&quot; y=&quot;300&quot; width=&quot;60&quot; height=&quot;20&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-fw-pips&quot; value=&quot;Public IPs&amp;#10;(≥20 prod)&quot; style=&quot;shape=mxgraph.azure.public_ip_address;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;555&quot; y=&quot;265&quot; width=&quot;30&quot; height=&quot;30&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- AzureBastionSubnet --&gt;
+        &lt;mxCell id=&quot;hub-bastion-snet&quot; value=&quot;&amp;lt;b&amp;gt;AzureBastionSubnet&amp;lt;/b&amp;gt;  10.0.2.0/27&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=9;verticalAlign=top;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;300&quot; y=&quot;360&quot; width=&quot;170&quot; height=&quot;75&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-bastion&quot; value=&quot;Azure&amp;#10;Bastion&quot; style=&quot;shape=mxgraph.azure.azure_bastion;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;345&quot; y=&quot;383&quot; width=&quot;50&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Private DNS Zones --&gt;
+        &lt;mxCell id=&quot;hub-dns-box&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;300&quot; y=&quot;455&quot; width=&quot;350&quot; height=&quot;105&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-dns-label&quot; value=&quot;&amp;lt;b&amp;gt;Private DNS Zones&amp;lt;/b&amp;gt; (linked to Hub + Spoke VNets)&quot; style=&quot;text;html=1;align=center;fontSize=9;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;458&quot; width=&quot;320&quot; height=&quot;15&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-dns-aks&quot; value=&quot;private.&amp;lt;region&amp;gt;.azmk8s.io&amp;#10;(VNet-integrated private cluster)&quot; style=&quot;text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;478&quot; width=&quot;200&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-dns-acr&quot; value=&quot;privatelink.azurecr.io&quot; style=&quot;text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;494&quot; width=&quot;200&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-dns-kv&quot; value=&quot;privatelink.vaultcore.azure.net&quot; style=&quot;text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;510&quot; width=&quot;200&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-dns-app&quot; value=&quot;app.example.corp (application DNS)&quot; style=&quot;text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;526&quot; width=&quot;200&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-dns-agc&quot; value=&quot;privatelink.&amp;lt;uid&amp;gt;.&amp;lt;region&amp;gt;.appgw.azure.com&quot; style=&quot;text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;542&quot; width=&quot;250&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Monitoring --&gt;
+        &lt;mxCell id=&quot;hub-mon-box&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#CCCCCC;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;280&quot; y=&quot;680&quot; width=&quot;390&quot; height=&quot;80&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-mon-label&quot; value=&quot;&amp;lt;b&amp;gt;Management Subscription (shared services)&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=center;fontSize=9;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;683&quot; width=&quot;280&quot; height=&quot;15&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-la&quot; value=&quot;Log Analytics&amp;#10;Workspace&quot; style=&quot;shape=mxgraph.azure.log_analytics;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;310&quot; y=&quot;710&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-prom&quot; value=&quot;Managed&amp;#10;Prometheus&quot; style=&quot;shape=mxgraph.azure.application_insights;fillColor=#68217A;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;400&quot; y=&quot;710&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-grafana&quot; value=&quot;Managed&amp;#10;Grafana&quot; style=&quot;shape=mxgraph.azure.application_insights;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;490&quot; y=&quot;710&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;hub-defender&quot; value=&quot;Defender for&amp;#10;Containers&quot; style=&quot;shape=mxgraph.azure.security_center;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;580&quot; y=&quot;710&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- APPLICATION LANDING ZONE SUBSCRIPTION – SPOKE --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;spoke-sub&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;740&quot; y=&quot;80&quot; width=&quot;1020&quot; height=&quot;760&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;spoke-sub-label&quot; value=&quot;&amp;lt;b&amp;gt;Application Landing Zone Subscription (Corp)&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=center;fontSize=12;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;950&quot; y=&quot;85&quot; width=&quot;350&quot; height=&quot;20&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Spoke VNet --&gt;
+        &lt;mxCell id=&quot;spoke-vnet&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;760&quot; y=&quot;115&quot; width=&quot;980&quot; height=&quot;590&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;spoke-vnet-label&quot; value=&quot;&amp;lt;b&amp;gt;Spoke VNet&amp;lt;/b&amp;gt;  10.10.0.0/16  (peered to Hub)&quot; style=&quot;text;html=1;align=center;fontSize=11;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1020&quot; y=&quot;118&quot; width=&quot;280&quot; height=&quot;18&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ============== NODE SUBNET ============== --&gt;
+        &lt;mxCell id=&quot;spoke-node-snet&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;780&quot; y=&quot;145&quot; width=&quot;520&quot; height=&quot;360&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;spoke-node-snet-label&quot; value=&quot;&amp;lt;b&amp;gt;snet-aks-nodes&amp;lt;/b&amp;gt;  10.10.0.0/22  |  NSG  |  UDR → 10.0.1.4 (Hub FW)&quot; style=&quot;text;html=1;align=left;fontSize=9;fontColor=#333333;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;785&quot; y=&quot;148&quot; width=&quot;400&quot; height=&quot;15&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- AKS Automatic Cluster box --&gt;
+        &lt;mxCell id=&quot;aks-box&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=#005A9E;opacity=15;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;800&quot; y=&quot;172&quot; width=&quot;480&quot; height=&quot;320&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-label&quot; value=&quot;&amp;lt;b&amp;gt;AKS Automatic Cluster&amp;lt;/b&amp;gt;  (sku: Automatic / tier: Standard)&quot; style=&quot;text;html=1;align=center;fontSize=11;fontColor=#0078D4;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;870&quot; y=&quot;175&quot; width=&quot;340&quot; height=&quot;18&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Preconfigured components row --&gt;
+        &lt;mxCell id=&quot;preconfig-label&quot; value=&quot;&amp;lt;b&amp;gt;Preconfigured (immutable)&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#666666;fontStyle=2;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;195&quot; width=&quot;150&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-cni&quot; value=&quot;Azure CNI&amp;#10;Overlay&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;212&quot; width=&quot;65&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-cilium&quot; value=&quot;Cilium&amp;#10;(dataplane&amp;#10;+ netpol)&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;885&quot; y=&quot;212&quot; width=&quot;65&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-wi&quot; value=&quot;Workload&amp;#10;Identity&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;960&quot; y=&quot;212&quot; width=&quot;65&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-oidc&quot; value=&quot;OIDC&amp;#10;Issuer&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1035&quot; y=&quot;212&quot; width=&quot;55&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-rbac&quot; value=&quot;Azure RBAC&amp;#10;for K8s&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1100&quot; y=&quot;212&quot; width=&quot;65&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-imgclean&quot; value=&quot;Image&amp;#10;Cleaner&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1175&quot; y=&quot;212&quot; width=&quot;55&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-safeguard&quot; value=&quot;Deployment&amp;#10;Safeguards&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;250&quot; width=&quot;70&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-autorepair&quot; value=&quot;Node&amp;#10;Auto-Repair&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;890&quot; y=&quot;250&quot; width=&quot;70&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-autoupgrade&quot; value=&quot;Auto-Upgrade&amp;#10;(stable)&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;970&quot; y=&quot;250&quot; width=&quot;70&quot; height=&quot;32&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Node provisioning --&gt;
+        &lt;mxCell id=&quot;nap-label&quot; value=&quot;&amp;lt;b&amp;gt;Node Autoprovisioning (Karpenter)&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#666666;fontStyle=2;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;290&quot; width=&quot;200&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-syspool&quot; value=&quot;System Pool&amp;#10;(Azure Linux&amp;#10;auto-sized)&quot; style=&quot;shape=mxgraph.azure.virtual_machine;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;820&quot; y=&quot;310&quot; width=&quot;45&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-karp1&quot; value=&quot;Karpenter&amp;#10;NodePool A&quot; style=&quot;shape=mxgraph.azure.virtual_machine;fillColor=#00BCF2;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;885&quot; y=&quot;310&quot; width=&quot;45&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-karp2&quot; value=&quot;Karpenter&amp;#10;NodePool B&quot; style=&quot;shape=mxgraph.azure.virtual_machine;fillColor=#00BCF2;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;950&quot; y=&quot;310&quot; width=&quot;45&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Scaling features --&gt;
+        &lt;mxCell id=&quot;aks-keda&quot; value=&quot;KEDA&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#00BCF2;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1050&quot; y=&quot;310&quot; width=&quot;45&quot; height=&quot;22&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-vpa&quot; value=&quot;VPA&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#00BCF2;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1105&quot; y=&quot;310&quot; width=&quot;40&quot; height=&quot;22&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-hpa&quot; value=&quot;HPA&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#00BCF2;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1155&quot; y=&quot;310&quot; width=&quot;40&quot; height=&quot;22&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Ingress controllers row --&gt;
+        &lt;mxCell id=&quot;ingress-label&quot; value=&quot;&amp;lt;b&amp;gt;Ingress Controllers&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#666666;fontStyle=2;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;360&quot; width=&quot;120&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-approuting&quot; value=&quot;App Routing&amp;#10;(managed NGINX)&amp;#10;[preconfigured]&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;378&quot; width=&quot;95&quot; height=&quot;42&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-albctrl&quot; value=&quot;ALB Controller&amp;#10;(AGC add-on)&amp;#10;[optional]&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;920&quot; y=&quot;378&quot; width=&quot;95&quot; height=&quot;42&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-istio&quot; value=&quot;Istio Ingress&amp;#10;Gateway&amp;#10;[optional]&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#107C10;fontColor=#FFFFFF;fontSize=7;strokeColor=none;strokeDasharray=4 4;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1030&quot; y=&quot;378&quot; width=&quot;85&quot; height=&quot;42&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-byo&quot; value=&quot;BYO Ingress&amp;#10;(e.g. Traefik)&amp;#10;[optional]&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#CCCCCC;fontColor=#333333;fontSize=7;strokeColor=none;strokeDasharray=4 4;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1130&quot; y=&quot;378&quot; width=&quot;80&quot; height=&quot;42&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Workloads --&gt;
+        &lt;mxCell id=&quot;aks-pods-label&quot; value=&quot;&amp;lt;b&amp;gt;Workload Pods&amp;lt;/b&amp;gt;  (overlay: 10.244.0.0/16  |  services: 10.245.0.0/16)&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#666666;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;810&quot; y=&quot;430&quot; width=&quot;350&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-pod1&quot; value=&quot;Frontend&amp;#10;Pod&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F25022;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;820&quot; y=&quot;450&quot; width=&quot;55&quot; height=&quot;30&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-pod2&quot; value=&quot;API&amp;#10;Pod&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F25022;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;890&quot; y=&quot;450&quot; width=&quot;55&quot; height=&quot;30&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-pod3&quot; value=&quot;Worker&amp;#10;Pod&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F25022;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;960&quot; y=&quot;450&quot; width=&quot;55&quot; height=&quot;30&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Storage drivers --&gt;
+        &lt;mxCell id=&quot;aks-disk&quot; value=&quot;Disk CSI&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1060&quot; y=&quot;450&quot; width=&quot;50&quot; height=&quot;22&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-file&quot; value=&quot;File CSI&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1120&quot; y=&quot;450&quot; width=&quot;50&quot; height=&quot;22&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-snap&quot; value=&quot;Snapshot Ctrl&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#0078D4;fontColor=#FFFFFF;fontSize=7;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1180&quot; y=&quot;450&quot; width=&quot;60&quot; height=&quot;22&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ============== API SERVER SUBNET ============== --&gt;
+        &lt;mxCell id=&quot;spoke-api-snet&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;780&quot; y=&quot;520&quot; width=&quot;300&quot; height=&quot;70&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;spoke-api-snet-label&quot; value=&quot;&amp;lt;b&amp;gt;snet-aks-apiserver&amp;lt;/b&amp;gt;  10.10.4.0/28  |  Delegated: Microsoft.ContainerService/managedClusters&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#333333;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;785&quot; y=&quot;523&quot; width=&quot;380&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;aks-apiserver&quot; value=&quot;K8s API Server&amp;#10;(VNet integrated ILB)&quot; style=&quot;shape=mxgraph.azure.kubernetes;fillColor=#326CE5;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;830&quot; y=&quot;542&quot; width=&quot;45&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ============== AGC SUBNET ============== --&gt;
+        &lt;mxCell id=&quot;spoke-agc-snet&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1320&quot; y=&quot;145&quot; width=&quot;400&quot; height=&quot;180&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;spoke-agc-snet-label&quot; value=&quot;&amp;lt;b&amp;gt;snet-agc&amp;lt;/b&amp;gt;  10.10.8.0/24  |  Delegated: Microsoft.ServiceNetworking/trafficControllers&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#333333;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1325&quot; y=&quot;148&quot; width=&quot;380&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;agc-resource&quot; value=&quot;Application Gateway&amp;#10;for Containers&amp;#10;(L7 load balancer)&quot; style=&quot;shape=mxgraph.azure.application_gateway;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1440&quot; y=&quot;175&quot; width=&quot;60&quot; height=&quot;55&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;agc-frontend&quot; value=&quot;Frontend&amp;#10;(Private IP /&amp;#10; Private FQDN)&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#999999;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1340&quot; y=&quot;185&quot; width=&quot;80&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;agc-assoc&quot; value=&quot;Association&amp;#10;(subnet link)&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#999999;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1540&quot; y=&quot;185&quot; width=&quot;70&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;agc-waf&quot; value=&quot;WAF Policy&amp;#10;(optional)&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#999999;fontSize=7;strokeDasharray=4 4;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1440&quot; y=&quot;245&quot; width=&quot;70&quot; height=&quot;30&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;agc-gwapi&quot; value=&quot;Gateway API CRDs&amp;#10;(GatewayClass,&amp;#10;Gateway, HTTPRoute)&quot; style=&quot;text;html=1;align=center;fontSize=7;fontColor=#0078D4;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1340&quot; y=&quot;245&quot; width=&quot;100&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ============== PRIVATE ENDPOINTS SUBNET ============== --&gt;
+        &lt;mxCell id=&quot;spoke-pe-snet&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1320&quot; y=&quot;345&quot; width=&quot;400&quot; height=&quot;165&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;spoke-pe-snet-label&quot; value=&quot;&amp;lt;b&amp;gt;snet-private-endpoints&amp;lt;/b&amp;gt;  10.10.12.0/24&quot; style=&quot;text;html=1;align=left;fontSize=8;fontColor=#333333;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1325&quot; y=&quot;348&quot; width=&quot;250&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-acr&quot; value=&quot;ACR&quot; style=&quot;shape=mxgraph.azure.container_registry;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1350&quot; y=&quot;380&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-acr-label&quot; value=&quot;PE&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E83123;fontColor=#FFFFFF;fontSize=6;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1355&quot; y=&quot;418&quot; width=&quot;20&quot; height=&quot;12&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-kv&quot; value=&quot;Key Vault&amp;#10;(TLS certs)&quot; style=&quot;shape=mxgraph.azure.key_vault;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1440&quot; y=&quot;380&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-kv-label&quot; value=&quot;PE&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E83123;fontColor=#FFFFFF;fontSize=6;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1445&quot; y=&quot;418&quot; width=&quot;20&quot; height=&quot;12&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-sa&quot; value=&quot;Storage&amp;#10;Account&quot; style=&quot;shape=mxgraph.azure.storage;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1530&quot; y=&quot;380&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-sa-label&quot; value=&quot;PE&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E83123;fontColor=#FFFFFF;fontSize=6;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1535&quot; y=&quot;418&quot; width=&quot;20&quot; height=&quot;12&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-sql&quot; value=&quot;Azure SQL /&amp;#10;CosmosDB&quot; style=&quot;shape=mxgraph.azure.sql_database;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1620&quot; y=&quot;380&quot; width=&quot;40&quot; height=&quot;35&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-sql-label&quot; value=&quot;PE&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#E83123;fontColor=#FFFFFF;fontSize=6;strokeColor=none;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1625&quot; y=&quot;418&quot; width=&quot;20&quot; height=&quot;12&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-note&quot; value=&quot;All PaaS services accessed via Private Endpoints only&amp;#10;(public access disabled). DNS resolved via Hub Private DNS Zones.&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#666666;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1330&quot; y=&quot;445&quot; width=&quot;350&quot; height=&quot;25&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-mi&quot; value=&quot;Managed Identity&amp;#10;(UserAssigned)&quot; style=&quot;shape=mxgraph.azure.managed_identities;fillColor=#0078D4;fontColor=#FFFFFF;strokeColor=none;fontSize=7;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1350&quot; y=&quot;480&quot; width=&quot;40&quot; height=&quot;25&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;pe-mi-note&quot; value=&quot;Needs: Network Contributor (VNet), DNS Zone Contributor (DNS),&amp;#10;AcrPull (ACR), Key Vault Secrets User (KV)&quot; style=&quot;text;html=1;align=left;fontSize=6;fontColor=#666666;spacingLeft=5;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1400&quot; y=&quot;480&quot; width=&quot;300&quot; height=&quot;25&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- Node RG (read-only) --&gt;
+        &lt;mxCell id=&quot;spoke-nrg&quot; value=&quot;&amp;lt;b&amp;gt;Node Resource Group&amp;lt;/b&amp;gt; (ReadOnly – managed by AKS)&amp;#10;VMSS, Load Balancers, Managed Disks, Public IPs (internal)&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#CCCCCC;fontSize=8;verticalAlign=middle;align=center;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;780&quot; y=&quot;610&quot; width=&quot;460&quot; height=&quot;50&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- INTERNET (egress target) --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;internet&quot; value=&quot;Internet&amp;#10;(mcr.microsoft.com,&amp;#10;packages.microsoft.com,&amp;#10;management.azure.com, ...)&quot; style=&quot;shape=mxgraph.azure.cloud;fillColor=#59B4D9;fontColor=#FFFFFF;strokeColor=none;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;340&quot; y=&quot;860&quot; width=&quot;110&quot; height=&quot;70&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- ARROWS – EXPRESSROUTE / VPN --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;arrow-er&quot; style=&quot;endArrow=classic;startArrow=classic;html=1;strokeWidth=3;strokeColor=#D6B656;entryX=0;entryY=0.5;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;onprem-boundary&quot; target=&quot;hub-ergw&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;arrow-er-label&quot; value=&quot;ExpressRoute / S2S VPN&quot; style=&quot;text;html=1;align=center;fontSize=8;fontColor=#D6B656;fontStyle=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;210&quot; y=&quot;170&quot; width=&quot;130&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- ARROWS – VNET PEERING --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;arrow-peer&quot; style=&quot;endArrow=classic;startArrow=classic;html=1;strokeWidth=2;strokeColor=#9673A6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;hub-vnet&quot; target=&quot;spoke-vnet&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;arrow-peer-label&quot; value=&quot;VNet Peering&quot; style=&quot;text;html=1;align=center;fontSize=8;fontColor=#9673A6;fontStyle=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;710&quot; y=&quot;395&quot; width=&quot;65&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TRAFFIC FLOW 1 – INGRESS (corp user → app via AGC) --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;tf-in-1&quot; style=&quot;endArrow=classic;html=1;strokeWidth=2;strokeColor=#107C10;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;onprem-user&quot; target=&quot;aks-approuting&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;&gt;
+            &lt;Array as=&quot;points&quot;&gt;
+              &lt;mxPoint x=&quot;120&quot; y=&quot;285&quot; /&gt;
+              &lt;mxPoint x=&quot;250&quot; y=&quot;200&quot; /&gt;
+              &lt;mxPoint x=&quot;1300&quot; y=&quot;200&quot; /&gt;
+            &lt;/Array&gt;
+          &lt;/mxGeometry&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-in-1-label&quot; value=&quot;❶ Corp user → Internal LB → App Routing NGINX (via ER + peering)&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#107C10;fontStyle=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;500&quot; y=&quot;173&quot; width=&quot;400&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;mxCell id=&quot;tf-in-2&quot; style=&quot;endArrow=classic;html=1;strokeWidth=2;strokeColor=#107C10;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;agc-resource&quot; target=&quot;aks-albctrl&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-in-2-label&quot; value=&quot;❷ AGC → ALB Controller → backend pods&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#107C10;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1095&quot; y=&quot;340&quot; width=&quot;220&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TRAFFIC FLOW 2 – EGRESS (pods → hub FW → internet) --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;tf-eg-1&quot; style=&quot;endArrow=classic;html=1;strokeWidth=2;strokeColor=#E83123;dashed=1;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;aks-pod3&quot; target=&quot;hub-fw&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;&gt;
+            &lt;Array as=&quot;points&quot;&gt;
+              &lt;mxPoint x=&quot;990&quot; y=&quot;510&quot; /&gt;
+              &lt;mxPoint x=&quot;750&quot; y=&quot;510&quot; /&gt;
+              &lt;mxPoint x=&quot;420&quot; y=&quot;370&quot; /&gt;
+            &lt;/Array&gt;
+          &lt;/mxGeometry&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-eg-1-label&quot; value=&quot;❸ Pod egress → UDR → Hub Azure Firewall (FQDN filtering)&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#E83123;fontStyle=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;500&quot; y=&quot;510&quot; width=&quot;300&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;mxCell id=&quot;tf-eg-2&quot; style=&quot;endArrow=classic;html=1;strokeWidth=2;strokeColor=#E83123;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;hub-fw&quot; target=&quot;internet&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;&gt;
+            &lt;Array as=&quot;points&quot;&gt;
+              &lt;mxPoint x=&quot;420&quot; y=&quot;860&quot; /&gt;
+            &lt;/Array&gt;
+          &lt;/mxGeometry&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-eg-2-label&quot; value=&quot;❹ Firewall → Internet (AzureKubernetesService FQDN tag + app rules)&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#E83123;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;280&quot; y=&quot;845&quot; width=&quot;320&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TRAFFIC FLOW 3 – KUBECTL (DevOps → API server) --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;tf-kubectl&quot; style=&quot;endArrow=classic;html=1;strokeWidth=1;strokeColor=#326CE5;dashed=1;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;onprem-devops&quot; target=&quot;aks-apiserver&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;&gt;
+            &lt;Array as=&quot;points&quot;&gt;
+              &lt;mxPoint x=&quot;120&quot; y=&quot;640&quot; /&gt;
+              &lt;mxPoint x=&quot;350&quot; y=&quot;640&quot; /&gt;
+              &lt;mxPoint x=&quot;750&quot; y=&quot;570&quot; /&gt;
+            &lt;/Array&gt;
+          &lt;/mxGeometry&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-kubectl-label&quot; value=&quot;❺ kubectl → Private API server (via ER + peering + Private DNS)&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#326CE5;fontStyle=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;260&quot; y=&quot;628&quot; width=&quot;310&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TRAFFIC FLOW 4 – POD → PaaS (private endpoints) --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;tf-pe&quot; style=&quot;endArrow=classic;html=1;strokeWidth=1;strokeColor=#68217A;dashed=1;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;aks-pod2&quot; target=&quot;pe-acr&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;&gt;
+            &lt;Array as=&quot;points&quot;&gt;
+              &lt;mxPoint x=&quot;920&quot; y=&quot;490&quot; /&gt;
+              &lt;mxPoint x=&quot;1200&quot; y=&quot;400&quot; /&gt;
+            &lt;/Array&gt;
+          &lt;/mxGeometry&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-pe-label&quot; value=&quot;❻ Pod → Private Endpoints (ACR, KV, SQL, Storage)&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#68217A;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1100&quot; y=&quot;530&quot; width=&quot;260&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TRAFFIC FLOW 5 – DNS RESOLUTION --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;tf-dns&quot; style=&quot;endArrow=classic;html=1;strokeWidth=1;strokeColor=#82B366;dashed=1;dashPattern=2 4;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;onprem-dns&quot; target=&quot;hub-dns-box&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-dns-label&quot; value=&quot;❼ DNS conditional forwarder → Azure Private DNS&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#82B366;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;175&quot; y=&quot;455&quot; width=&quot;230&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- TRAFFIC FLOW 6 – MONITORING --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;tf-mon&quot; style=&quot;endArrow=classic;html=1;strokeWidth=1;strokeColor=#68217A;dashed=1;dashPattern=2 4;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;aks-box&quot; target=&quot;hub-prom&quot;&gt;
+          &lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;&gt;
+            &lt;Array as=&quot;points&quot;&gt;
+              &lt;mxPoint x=&quot;780&quot; y=&quot;750&quot; /&gt;
+            &lt;/Array&gt;
+          &lt;/mxGeometry&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;tf-mon-label&quot; value=&quot;❽ Metrics + logs → Managed Prometheus + Log Analytics&quot; style=&quot;text;html=1;align=left;fontSize=7;fontColor=#68217A;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;500&quot; y=&quot;760&quot; width=&quot;270&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+        &lt;!-- ================================================================ --&gt;
+        &lt;!-- LEGEND --&gt;
+        &lt;!-- ================================================================ --&gt;
+        &lt;mxCell id=&quot;legend&quot; value=&quot;&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#CCCCCC;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;780&quot; y=&quot;720&quot; width=&quot;950&quot; height=&quot;100&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;legend-title&quot; value=&quot;&amp;lt;b&amp;gt;Traffic Flows&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;fontSize=9;fontColor=#333333;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;790&quot; y=&quot;723&quot; width=&quot;80&quot; height=&quot;15&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l1&quot; value=&quot;&amp;lt;font color=&amp;quot;#107C10&amp;quot;&amp;gt;━━&amp;lt;/font&amp;gt; ❶❷ Ingress: Corp User → Internal LB → App Routing NGINX → Pods&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;790&quot; y=&quot;742&quot; width=&quot;400&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l2&quot; value=&quot;&amp;lt;font color=&amp;quot;#E83123&amp;quot;&amp;gt;╌╌&amp;lt;/font&amp;gt; ❸❹ Egress: Pods → UDR → Hub Azure Firewall (FQDN tag) → Internet&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;790&quot; y=&quot;758&quot; width=&quot;400&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l3&quot; value=&quot;&amp;lt;font color=&amp;quot;#326CE5&amp;quot;&amp;gt;╌╌&amp;lt;/font&amp;gt; ❺ kubectl: DevOps → ExpressRoute → Private API Server (VNet integrated)&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;790&quot; y=&quot;774&quot; width=&quot;400&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l4&quot; value=&quot;&amp;lt;font color=&amp;quot;#68217A&amp;quot;&amp;gt;╌╌&amp;lt;/font&amp;gt; ❻ Pod → PaaS: Workload Identity + Private Endpoints (ACR, KV, SQL, Storage)&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;790&quot; y=&quot;790&quot; width=&quot;420&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l5&quot; value=&quot;&amp;lt;font color=&amp;quot;#82B366&amp;quot;&amp;gt;╌╌&amp;lt;/font&amp;gt; ❼ DNS: On-prem conditional forwarder → Hub Private DNS Zones → private IPs&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1210&quot; y=&quot;742&quot; width=&quot;420&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l6&quot; value=&quot;&amp;lt;font color=&amp;quot;#68217A&amp;quot;&amp;gt;╌╌&amp;lt;/font&amp;gt; ❽ Monitoring: Prometheus metrics + Container Insights → central Log Analytics&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1210&quot; y=&quot;758&quot; width=&quot;420&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l7&quot; value=&quot;&amp;lt;font color=&amp;quot;#D6B656&amp;quot;&amp;gt;━━&amp;lt;/font&amp;gt; ExpressRoute / VPN  |  &amp;lt;font color=&amp;quot;#9673A6&amp;quot;&amp;gt;━━&amp;lt;/font&amp;gt; VNet Peering  |  &amp;lt;font color=&amp;quot;#E83123&amp;quot;&amp;gt;PE&amp;lt;/font&amp;gt; = Private Endpoint&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1210&quot; y=&quot;774&quot; width=&quot;400&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+        &lt;mxCell id=&quot;l8&quot; value=&quot;&amp;lt;font color=&amp;quot;#0078D4&amp;quot;&amp;gt;■&amp;lt;/font&amp;gt; Preconfigured (immutable)  |  &amp;lt;font color=&amp;quot;#107C10&amp;quot;&amp;gt;■&amp;lt;/font&amp;gt; Ingress controllers  |  &amp;lt;font color=&amp;quot;#00BCF2&amp;quot;&amp;gt;■&amp;lt;/font&amp;gt; Scaling / NAP  |  &amp;lt;font color=&amp;quot;#F25022&amp;quot;&amp;gt;■&amp;lt;/font&amp;gt; Workload pods&quot; style=&quot;text;html=1;fontSize=8;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;
+          &lt;mxGeometry x=&quot;1210&quot; y=&quot;790&quot; width=&quot;450&quot; height=&quot;14&quot; as=&quot;geometry&quot; /&gt;
+        &lt;/mxCell&gt;
+
+      &lt;/root&gt;
+    &lt;/mxGraphModel&gt;
+  &lt;/diagram&gt;
+&lt;/mxfile&gt;
+" style="background-color: rgb(255, 255, 255);">
+  <defs/>
+  <g>
+    <text x="900" y="30" text-anchor="middle" font-size="18" font-weight="bold" font-family="Segoe UI, Helvetica, Arial">AKS Automatic in ALZ Corp (Private Connectivity)</text>
+    <text x="900" y="52" text-anchor="middle" font-size="11" font-family="Segoe UI, Helvetica, Arial" fill="#666">Egress forced through hub Azure Firewall via UDR. Ingress via App Routing internal LB. Open this file in diagrams.net to edit.</text>
+
+    <!-- On-Premises -->
+    <rect x="10" y="80" width="140" height="210" rx="8" fill="#F5F5F5" stroke="#999" stroke-dasharray="4 4"/>
+    <text x="80" y="100" text-anchor="middle" font-size="11" font-weight="bold" font-family="Segoe UI">On-Premises</text>
+    <text x="80" y="130" text-anchor="middle" font-size="9" font-family="Segoe UI">Corp User</text>
+    <text x="80" y="170" text-anchor="middle" font-size="9" font-family="Segoe UI">DevOps (kubectl)</text>
+    <text x="80" y="210" text-anchor="middle" font-size="9" font-family="Segoe UI">DNS Server</text>
+    <text x="80" y="224" text-anchor="middle" font-size="8" font-family="Segoe UI" fill="#666">(cond. forwarder)</text>
+    <text x="80" y="262" text-anchor="middle" font-size="8" font-family="Segoe UI" fill="#666">168.63.129.16</text>
+
+    <!-- Hub VNet -->
+    <rect x="180" y="70" width="300" height="430" rx="8" fill="#DAE8FC" stroke="#6C8EBF"/>
+    <text x="330" y="88" text-anchor="middle" font-size="11" font-weight="bold" font-family="Segoe UI">Connectivity Subscription</text>
+    <rect x="195" y="100" width="270" height="180" rx="6" fill="#E1D5E7" stroke="#9673A6"/>
+    <text x="330" y="116" text-anchor="middle" font-size="10" font-weight="bold" font-family="Segoe UI">Hub VNet 10.0.0.0/16</text>
+    <rect x="205" y="125" width="120" height="35" rx="4" fill="#FFF2CC" stroke="#D6B656"/>
+    <text x="265" y="147" text-anchor="middle" font-size="8" font-family="Segoe UI">ExpressRoute GW</text>
+    <rect x="205" y="170" width="250" height="50" rx="4" fill="#FFF2CC" stroke="#D6B656"/>
+    <text x="330" y="190" text-anchor="middle" font-size="9" font-weight="bold" font-family="Segoe UI" fill="#E83123">Azure Firewall 10.0.1.4</text>
+    <text x="330" y="205" text-anchor="middle" font-size="7" font-family="Segoe UI" fill="#666">AzureKubernetesService FQDN tag</text>
+    <rect x="205" y="230" width="120" height="35" rx="4" fill="#FFF2CC" stroke="#D6B656"/>
+    <text x="265" y="252" text-anchor="middle" font-size="8" font-family="Segoe UI">Azure Bastion</text>
+
+    <!-- Private DNS Zones -->
+    <rect x="195" y="290" width="270" height="90" rx="6" fill="#D5E8D4" stroke="#82B366"/>
+    <text x="330" y="306" text-anchor="middle" font-size="9" font-weight="bold" font-family="Segoe UI">Private DNS Zones</text>
+    <text x="205" y="322" font-size="7" font-family="Segoe UI, monospace" fill="#333">  private.&lt;region&gt;.azmk8s.io</text>
+    <text x="205" y="335" font-size="7" font-family="Segoe UI, monospace" fill="#333">  privatelink.azurecr.io</text>
+    <text x="205" y="348" font-size="7" font-family="Segoe UI, monospace" fill="#333">  privatelink.vaultcore.azure.net</text>
+    <text x="205" y="361" font-size="7" font-family="Segoe UI, monospace" fill="#333">  app.contoso.corp</text>
+
+    <!-- Monitoring -->
+    <rect x="195" y="400" width="270" height="50" rx="6" fill="#F5F5F5" stroke="#CCC"/>
+    <text x="330" y="416" text-anchor="middle" font-size="8" font-weight="bold" font-family="Segoe UI">Management Subscription</text>
+    <text x="330" y="434" text-anchor="middle" font-size="7" font-family="Segoe UI" fill="#666">Log Analytics | Managed Prometheus | Azure Monitor Dashboards</text>
+
+    <!-- Peering arrow -->
+    <line x1="465" y1="200" x2="510" y2="200" stroke="#9673A6" stroke-width="2" marker-end="url(#arrowPurple)" marker-start="url(#arrowPurple)"/>
+    <text x="488" y="195" text-anchor="middle" font-size="7" font-family="Segoe UI" fill="#9673A6">VNet Peering</text>
+
+    <!-- Spoke VNet -->
+    <rect x="510" y="70" width="770" height="430" rx="8" fill="#D5E8D4" stroke="#82B366"/>
+    <text x="895" y="88" text-anchor="middle" font-size="11" font-weight="bold" font-family="Segoe UI">Application Landing Zone Corp (Spoke VNet 10.10.0.0/16)</text>
+
+    <!-- Node Subnet -->
+    <rect x="525" y="100" width="440" height="250" rx="6" fill="#FFF2CC" stroke="#D6B656"/>
+    <text x="530" y="115" font-size="8" font-weight="bold" font-family="Segoe UI">snet-aks-nodes 10.10.0.0/22 | NSG | UDR to 10.0.1.4</text>
+
+    <!-- AKS Cluster -->
+    <rect x="535" y="125" width="420" height="215" rx="5" fill="#0078D4" fill-opacity="0.08" stroke="#005A9E"/>
+    <text x="745" y="141" text-anchor="middle" font-size="10" font-weight="bold" font-family="Segoe UI" fill="#0078D4">AKS Automatic (sku:Automatic, tier:Standard)</text>
+
+    <!-- Preconfigured -->
+    <text x="545" y="160" font-size="7" font-weight="bold" font-family="Segoe UI" fill="#666">Preconfigured:</text>
+    <rect x="545" y="165" width="55" height="18" rx="3" fill="#0078D4"/><text x="572" y="177" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">CNI Overlay</text>
+    <rect x="605" y="165" width="45" height="18" rx="3" fill="#0078D4"/><text x="627" y="177" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Cilium</text>
+    <rect x="655" y="165" width="65" height="18" rx="3" fill="#0078D4"/><text x="687" y="177" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Workload ID</text>
+    <rect x="725" y="165" width="40" height="18" rx="3" fill="#0078D4"/><text x="745" y="177" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">OIDC</text>
+    <rect x="770" y="165" width="60" height="18" rx="3" fill="#0078D4"/><text x="800" y="177" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Azure RBAC</text>
+    <rect x="835" y="165" width="65" height="18" rx="3" fill="#0078D4"/><text x="867" y="177" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Img Cleaner</text>
+    <rect x="545" y="187" width="70" height="18" rx="3" fill="#0078D4"/><text x="580" y="199" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Safeguards</text>
+    <rect x="620" y="187" width="65" height="18" rx="3" fill="#0078D4"/><text x="652" y="199" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Auto-Repair</text>
+    <rect x="690" y="187" width="70" height="18" rx="3" fill="#0078D4"/><text x="725" y="199" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Auto-Upgrade</text>
+
+    <!-- Karpenter -->
+    <text x="545" y="218" font-size="7" font-weight="bold" font-family="Segoe UI" fill="#666">Karpenter NAP:</text>
+    <rect x="545" y="223" width="60" height="22" rx="3" fill="#00BCF2"/><text x="575" y="237" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">System Pool</text>
+    <rect x="610" y="223" width="60" height="22" rx="3" fill="#00BCF2"/><text x="640" y="237" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">User Pools</text>
+    <rect x="690" y="223" width="35" height="22" rx="3" fill="#00BCF2"/><text x="707" y="237" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">KEDA</text>
+    <rect x="730" y="223" width="30" height="22" rx="3" fill="#00BCF2"/><text x="745" y="237" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">VPA</text>
+    <rect x="765" y="223" width="30" height="22" rx="3" fill="#00BCF2"/><text x="780" y="237" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">HPA</text>
+
+    <!-- Ingress -->
+    <text x="545" y="260" font-size="7" font-weight="bold" font-family="Segoe UI" fill="#666">Ingress:</text>
+    <rect x="545" y="264" width="100" height="22" rx="3" fill="#107C10"/><text x="595" y="278" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">App Routing (NGINX)</text>
+    <rect x="650" y="264" width="75" height="22" rx="3" fill="#107C10" stroke="#666" stroke-dasharray="3 2"/><text x="687" y="278" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Istio (optional)</text>
+
+    <!-- Pods -->
+    <text x="545" y="302" font-size="7" font-weight="bold" font-family="Segoe UI" fill="#666">Pods (overlay 10.244.0.0/16, svc 10.245.0.0/16):</text>
+    <rect x="545" y="307" width="50" height="20" rx="3" fill="#F25022"/><text x="570" y="320" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Frontend</text>
+    <rect x="600" y="307" width="40" height="20" rx="3" fill="#F25022"/><text x="620" y="320" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">API</text>
+    <rect x="645" y="307" width="50" height="20" rx="3" fill="#F25022"/><text x="670" y="320" text-anchor="middle" font-size="6" fill="white" font-family="Segoe UI">Worker</text>
+
+    <!-- API Server Subnet -->
+    <rect x="525" y="360" width="240" height="40" rx="5" fill="#FFF2CC" stroke="#D6B656"/>
+    <text x="530" y="375" font-size="8" font-weight="bold" font-family="Segoe UI">snet-aks-apiserver 10.10.4.0/28</text>
+    <text x="530" y="390" font-size="7" font-family="Segoe UI" fill="#666">Delegated: ContainerService | API Server ILB</text>
+
+    <!-- PE Subnet -->
+    <rect x="985" y="100" width="280" height="130" rx="6" fill="#FFF2CC" stroke="#D6B656"/>
+    <text x="990" y="115" font-size="8" font-weight="bold" font-family="Segoe UI">snet-private-endpoints 10.10.12.0/24</text>
+    <rect x="1000" y="125" width="50" height="30" rx="3" fill="#0078D4"/><text x="1025" y="143" text-anchor="middle" font-size="7" fill="white" font-family="Segoe UI">ACR</text>
+    <rect x="1060" y="125" width="55" height="30" rx="3" fill="#0078D4"/><text x="1087" y="143" text-anchor="middle" font-size="7" fill="white" font-family="Segoe UI">Key Vault</text>
+    <rect x="1125" y="125" width="50" height="30" rx="3" fill="#0078D4"/><text x="1150" y="143" text-anchor="middle" font-size="7" fill="white" font-family="Segoe UI">Storage</text>
+    <rect x="1185" y="125" width="65" height="30" rx="3" fill="#0078D4"/><text x="1217" y="143" text-anchor="middle" font-size="7" fill="white" font-family="Segoe UI">SQL/Cosmos</text>
+    <text x="1000" y="172" font-size="6" fill="#E83123" font-family="Segoe UI">PE = Private Endpoint (public access disabled)</text>
+    <text x="1000" y="185" font-size="6" fill="#666" font-family="Segoe UI">DNS resolved via Hub Private DNS Zones</text>
+    <text x="1000" y="198" font-size="6" fill="#666" font-family="Segoe UI">Auth via Workload Identity</text>
+
+    <!-- AGC note -->
+    <rect x="985" y="245" width="280" height="60" rx="6" fill="#FFF" stroke="#CCC" stroke-dasharray="4 4"/>
+    <text x="1125" y="262" text-anchor="middle" font-size="8" font-weight="bold" font-family="Segoe UI" fill="#999">Application Gateway for Containers</text>
+    <text x="1125" y="278" text-anchor="middle" font-size="7" font-family="Segoe UI" fill="#999">Not yet available on AKS Automatic</text>
+    <text x="1125" y="291" text-anchor="middle" font-size="7" font-family="Segoe UI" fill="#999">Public frontend only (no private IP)</text>
+
+    <!-- Node RG -->
+    <rect x="985" y="320" width="280" height="30" rx="4" fill="#F5F5F5" stroke="#CCC"/>
+    <text x="1125" y="340" text-anchor="middle" font-size="7" font-family="Segoe UI" fill="#666">Node Resource Group (ReadOnly) - VMSS, LBs, Disks</text>
+
+    <!-- Internet -->
+    <rect x="200" y="480" width="100" height="40" rx="20" fill="#59B4D9"/><text x="250" y="504" text-anchor="middle" font-size="9" fill="white" font-family="Segoe UI">Internet</text>
+
+    <!-- ============ FLOW ARROWS ============ -->
+    <!-- ExpressRoute -->
+    <line x1="150" y1="150" x2="195" y2="150" stroke="#D6B656" stroke-width="3"/>
+    <text x="172" y="143" text-anchor="middle" font-size="6" fill="#D6B656" font-family="Segoe UI">ER/VPN</text>
+
+    <!-- 1: Corp User -> App Routing -->
+    <path d="M 120,125 C 200,60 400,60 595,264" fill="none" stroke="#107C10" stroke-width="2" marker-end="url(#arrowGreen)"/>
+    <text x="350" y="55" text-anchor="middle" font-size="7" font-weight="bold" fill="#107C10" font-family="Segoe UI">1 Corp User -> Internal LB -> App Routing</text>
+
+    <!-- 2: App Routing -> Pods -->
+    <line x1="595" y1="286" x2="570" y2="307" stroke="#107C10" stroke-width="2" marker-end="url(#arrowGreen)"/>
+    <text x="610" y="300" font-size="6" fill="#107C10" font-family="Segoe UI">2</text>
+
+    <!-- 3: Pods -> Hub FW (egress) -->
+    <path d="M 645,327 C 645,440 400,440 330,220" fill="none" stroke="#E83123" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#arrowRed)"/>
+    <text x="500" y="448" text-anchor="middle" font-size="7" font-weight="bold" fill="#E83123" font-family="Segoe UI">3 Egress: UDR 0.0.0.0/0 -> Hub Firewall</text>
+
+    <!-- 4: FW -> Internet -->
+    <line x1="330" y1="220" x2="250" y2="480" stroke="#E83123" stroke-width="2" marker-end="url(#arrowRed)"/>
+    <text x="260" y="470" font-size="6" fill="#E83123" font-family="Segoe UI">4 FQDN filtered</text>
+
+    <!-- 5: DevOps -> API Server -->
+    <path d="M 120,165 C 200,370 400,380 525,380" fill="none" stroke="#326CE5" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowBlue)"/>
+    <text x="300" y="390" font-size="7" font-weight="bold" fill="#326CE5" font-family="Segoe UI">5 kubectl -> Private API Server (ILB)</text>
+
+    <!-- 6: Pods -> PE -->
+    <path d="M 695,317 C 800,340 950,180 1000,145" fill="none" stroke="#68217A" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowPurpleDark)"/>
+    <text x="870" y="310" font-size="7" fill="#68217A" font-family="Segoe UI">6 Private Endpoints</text>
+
+    <!-- 7: DNS -->
+    <path d="M 120,224 C 150,310 190,320 195,330" fill="none" stroke="#82B366" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arrowGreenLight)"/>
+    <text x="100" y="295" font-size="6" fill="#82B366" font-family="Segoe UI">7 DNS fwd</text>
+
+    <!-- 8: Monitoring -->
+    <path d="M 745,340 C 600,440 400,430 330,430" fill="none" stroke="#68217A" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arrowPurpleDark)"/>
+    <text x="550" y="425" font-size="6" fill="#68217A" font-family="Segoe UI">8 Metrics + Logs</text>
+
+    <!-- Arrow markers -->
+    <defs>
+      <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#107C10"/></marker>
+      <marker id="arrowRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#E83123"/></marker>
+      <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#326CE5"/></marker>
+      <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#9673A6"/></marker>
+      <marker id="arrowPurpleDark" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#68217A"/></marker>
+      <marker id="arrowGreenLight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#82B366"/></marker>
+    </defs>
+
+    <!-- Legend -->
+    <rect x="510" y="415" width="755" height="85" rx="6" fill="#F9F9F9" stroke="#DDD"/>
+    <text x="520" y="432" font-size="8" font-weight="bold" font-family="Segoe UI">Traffic Flows</text>
+    <text x="520" y="446" font-size="7" font-family="Segoe UI"><tspan fill="#107C10">--</tspan> 1-2 Ingress: Corp User -> ER -> Peering -> Internal LB -> App Routing NGINX -> Pods</text>
+    <text x="520" y="459" font-size="7" font-family="Segoe UI"><tspan fill="#E83123">--</tspan> 3-4 Egress: Pods -> UDR -> Hub Azure Firewall (FQDN tag) -> Internet</text>
+    <text x="520" y="472" font-size="7" font-family="Segoe UI"><tspan fill="#326CE5">--</tspan> 5 kubectl: DevOps -> ER -> Peering -> API Server ILB (private.region.azmk8s.io)</text>
+    <text x="520" y="485" font-size="7" font-family="Segoe UI"><tspan fill="#68217A">--</tspan> 6 Pod -> PaaS: Workload Identity + Private Endpoints (ACR, KV, SQL, Storage)</text>
+    <text x="990" y="446" font-size="7" font-family="Segoe UI"><tspan fill="#82B366">--</tspan> 7 DNS: On-prem -> Conditional fwd (168.63.129.16) -> Hub Private DNS</text>
+    <text x="990" y="459" font-size="7" font-family="Segoe UI"><tspan fill="#68217A">--</tspan> 8 Monitoring: Prometheus + Container Insights -> Log Analytics</text>
+    <text x="990" y="472" font-size="7" font-family="Segoe UI"><tspan fill="#999">---</tspan> AGC: Not yet available on AKS Automatic / public frontend only</text>
+  </g>
+</svg>
