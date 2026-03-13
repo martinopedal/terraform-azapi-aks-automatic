@@ -62,7 +62,7 @@ output "apiserver_subnet_id" {
 }
 
 output "nat_gateway_public_ip" {
-  description = "Public IP address of the NAT Gateway (null when not using NAT GW egress)."
+  description = "Resource ID of the NAT Gateway public IP (null when not using NAT GW egress)."
   value       = try(azapi_resource.nat_gateway_pip[0].id, null)
 }
 
