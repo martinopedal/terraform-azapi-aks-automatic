@@ -83,7 +83,7 @@ The following diagrams show AKS Automatic deployed in an ALZ Corp spoke subscrip
 
 #### Detailed Architecture
 
-![ALZ Corp - AKS Automatic Architecture](docs/alz-corp-aks-automatic.drawio.svg)
+![ALZ Corp - AKS Automatic Architecture](docs/alz-corp-aks-automatic.drawio.png)
 
 #### Schematic Traffic Flows
 
