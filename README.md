@@ -1,4 +1,4 @@
-# AKS Automatic – Terraform (azapi) with ALZ Corp Integration
+# AKS Automatic - Terraform (azapi) with ALZ Corp Integration
 
 ## Table of Contents
 
@@ -44,7 +44,7 @@ This repository contains a Terraform root module that deploys an **AKS Automatic
 The module supports:
 
 - BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints); this module currently implements the node and API server subnets, with AGC and private endpoint subnets added as needed
-- Three egress options: NAT Gateway, Standard Load Balancer, User-Defined Routing (hub firewall)
+- Two egress options: User-Defined Routing through hub firewall (Corp default) and Standard Load Balancer (dev/test only). Managed NAT Gateway available only with AKS-managed VNet.
 - Three ingress options: Application Gateway for Containers, Application Routing add-on, Istio
 - Private cluster with VNet-integrated API server
 - Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
@@ -226,7 +226,7 @@ AKS Automatic supports three ingress options, but they do not all use the same A
 > 1. **The AGC AKS add-on is not yet supported on AKS Automatic clusters.** The add-on is available on AKS Standard only. Based on product group signals, support for AKS Automatic is expected in the near future. See [AGC ALB Controller Add-on](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon).
 > 2. **AGC frontends do not support private IP addresses.** Frontends only expose a public FQDN. Based on public signals from the AGC product team, private ingress support is actively in development and is expected in the near future. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
 >
-> No official timelines or GA dates have been committed for either feature — plan accordingly and do not take dependencies on unannounced features.
+> No official timelines or GA dates have been committed for either feature  - plan accordingly and do not take dependencies on unannounced features.
 >
 > For ALZ Corp scenarios requiring fully private ingress today, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode**.
 
@@ -298,7 +298,7 @@ Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub
 
 ### Egress
 
-In an ALZ Corp deployment, the standard pattern is **UDR through the hub Azure Firewall**. Four egress options are available depending on the VNet configuration.
+In an ALZ Corp deployment, the standard pattern is **UDR through the hub Azure Firewall**. Three egress patterns are available depending on the VNet configuration.
 
 #### Managed NAT Gateway (managed VNet only)
 
@@ -309,18 +309,6 @@ Pods -> Node -> Managed NAT Gateway -> Internet
 - `enable_byo_vnet = false`
 - AKS creates and manages the NAT Gateway. No configuration available.
 - Not suitable for Corp: egress is unfiltered with no centralised logging.
-
-#### User-Assigned NAT Gateway (BYO VNet)
-
-```
-Pods -> Node -> NAT Gateway -> Public IP -> Internet
-```
-
-- `egress_type = "userAssignedNATGateway"`
-- Creates Public IP + NAT Gateway associated to the node subnet.
-- 64k SNAT ports per public IP, deterministic outbound IP.
-- `nat_gateway_idle_timeout` configurable (4-120 minutes).
-- No centralised FQDN filtering. Combine with Cilium L7 policies for in-cluster egress control.
 
 #### Standard Load Balancer (BYO VNet, dev/test only)
 
@@ -372,14 +360,14 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 
 #### Egress Comparison
 
-| | Managed NAT GW | User NAT GW | Load Balancer | UDR |
-|---|---|---|---|---|
-| BYO VNet | ❌ | ✅ | ✅ | ✅ |
-| Static outbound IP | ❌ | ✅ | ❌ | Via firewall |
-| SNAT ports | High (auto) | 64k per PIP | ~1k per node | Via firewall |
-| Centralised filtering | ❌ | ❌ | ❌ | ✅ |
-| ALZ Corp suitable | ❌ | Partial | ❌ | ✅ |
-| Terraform variable | default | `userAssignedNATGateway` | `loadBalancer` | `userDefinedRouting` |
+| | Managed NAT GW | Load Balancer | UDR |
+|---|---|---|---|
+| BYO VNet | ❌ | ✅ | ✅ |
+| Static outbound IP | ❌ | ❌ | Via firewall |
+| SNAT ports | High (auto) | ~1k per node | Via firewall |
+| Centralised filtering | ❌ | ❌ | ✅ |
+| ALZ Corp suitable | ❌ | ❌ | ✅ |
+| Terraform setting | `enable_byo_vnet = false` | `egress_type = "loadBalancer"` | `egress_type = "userDefinedRouting"` |
 
 ### Security
 
@@ -476,7 +464,7 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 | Upgrade channels | `upgrade_channel`, `node_os_upgrade_channel` |
 | Maintenance windows | `maintenanceConfigurations` |
 | Networking | BYO VNet, pod/service CIDRs, DNS service IP |
-| Egress | NAT Gateway, Load Balancer, or UDR (BYO VNet) |
+| Egress | UDR through hub firewall (Corp default), Load Balancer (dev/test only) |
 | Ingress | AGC add-on, DNS zones for App Routing, Istio |
 | Private cluster | `enable_private_cluster`, `authorized_ip_ranges` |
 | Monitoring | Prometheus, Container Insights, Managed Grafana |
@@ -537,12 +525,12 @@ This module deploys into a **Corp spoke subscription** within an Azure Landing Z
 
 ### VNet and Subnet Ownership
 
-In ALZ, the connectivity subscription owns the hub VNet and the platform team manages peering. This module creates its own spoke VNet in `network.tf`.
+In ALZ, the connectivity subscription owns the hub VNet and the platform team manages peering. This module can either create its own spoke VNet in `network.tf` or consume pre-provisioned subnets via the external subnet ID inputs.
 
 **What you must handle externally:**
 
 - Peer the spoke VNet to the ALZ hub. This module does not create peering resources.
-- If the platform team pre-provisions spoke VNets, set `enable_byo_vnet = false` and modify `locals.tf` to accept external subnet IDs via variables instead of referencing `azapi_resource.node_subnet[0].id`.
+- If the platform team pre-provisions spoke VNets, keep `enable_byo_vnet = true` and pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id` as needed. `network.tf` is skipped automatically when external subnet IDs are supplied.
 
 ### CIDR Coordination
 
@@ -619,7 +607,6 @@ ALZ assigns Azure Policies at the management group level. AKS Automatic preconfi
 | `Kubernetes cluster should not allow privileged containers` | AKS system pods require privileges |
 | `Network policies should be enforced on AKS clusters` | Already enforced by Cilium but policy may not detect this |
 | Policies enforcing specific NSG rules | AKS injects its own NSG rules that may violate strict policies |
-| Policies denying public IPs on subnets | NAT Gateway requires a public IP resource |
 
 **Action:** Audit ALZ policy assignments before deploying:
 
@@ -663,15 +650,15 @@ ALZ deploys a central Log Analytics workspace in the management subscription. To
 
 If the ALZ platform uses the [AVM Subscription Vending module](https://github.com/Azure/bicep-registry-modules/tree/main/avm/ptn/lz/sub-vending) to provision application landing zone subscriptions, and the network team has customised it with [Azure Virtual Network Manager (AVNM) IPAM](https://learn.microsoft.com/azure/virtual-network-manager/concept-ip-address-management) for centralised IP address allocation, the following considerations change compared to the default BYO VNet path documented above.
 
-**VNet and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, and UDR as part of the landing zone provisioning — before this AKS module runs. This module's `enable_byo_vnet = true` path (which creates its own VNet in `network.tf`) would conflict with that. Instead, set `enable_byo_vnet = false` and pass the pre-existing subnet resource IDs directly. This requires adding `node_subnet_id` and `apiserver_subnet_id` input variables to `locals.tf` to replace the current `azapi_resource.node_subnet[0].id` references. The module does not implement this path today — it is a documented extension point.
+**VNet and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, and UDR as part of the landing zone provisioning  - before this AKS module runs. In this mode, keep `enable_byo_vnet = true` and pass the pre-existing subnet resource IDs via `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id` as needed. When external subnet IDs are supplied, `network.tf` is skipped automatically.
 
-**CIDR ranges are allocated from AVNM IPAM pools, not manually.** The `vnet_address_space`, `node_subnet_address_prefix`, and `apiserver_subnet_address_prefix` variables become irrelevant — the vending pipeline controls these via IPAM pool reservations. The overlay CIDRs (`pod_cidr`, `service_cidr`) are not part of the VNet address space (they exist in the overlay) but still must not overlap with any routable address space in the IPAM plan. Coordinate these with the network team.
+**CIDR ranges are allocated from AVNM IPAM pools, not manually.** The `vnet_address_space`, `node_subnet_address_prefix`, and `apiserver_subnet_address_prefix` variables become irrelevant  - the vending pipeline controls these via IPAM pool reservations. The overlay CIDRs (`pod_cidr`, `service_cidr`) are not part of the VNet address space (they exist in the overlay) but still must not overlap with any routable address space in the IPAM plan. Coordinate these with the network team.
 
 **Subnet delegations must be configured in the vending pipeline.** The API server subnet requires delegation to `Microsoft.ContainerService/managedClusters` and the AGC subnet requires delegation to `Microsoft.ServiceNetworking/trafficControllers`. These delegations must be part of the vending module's subnet definitions, not applied by this module after the fact.
 
-**Peering and route tables are handled by the vending pipeline.** The subscription vending module typically creates hub-spoke peering and attaches the UDR (pointing to the hub firewall) to the node subnet as part of provisioning. The NSG, route table, and NAT Gateway resources in `network.tf` are not needed.
+**Peering and route tables are handled by the vending pipeline.** The subscription vending module typically creates hub-spoke peering and attaches the UDR (pointing to the hub firewall) to the node subnet as part of provisioning. The NSG and route table resources in `network.tf` are not needed.
 
-**Terraform state boundaries.** The vending module uses `azurerm` (AVM convention). This module uses `azapi`. They operate in separate Terraform states. Pass subnet IDs as input variables — do not use `data` source lookups across states, as that creates implicit dependencies that break when the vending pipeline runs independently.
+**Terraform state boundaries.** The vending module uses `azurerm` (AVM convention). This module uses `azapi`. They operate in separate Terraform states. Pass subnet IDs as input variables  - do not use `data` source lookups across states, as that creates implicit dependencies that break when the vending pipeline runs independently.
 
 **Summary of what changes:**
 
@@ -683,8 +670,8 @@ If the ALZ platform uses the [AVM Subscription Vending module](https://github.co
 | Subnet delegations | This module (`network.tf`) | Vending pipeline subnet definitions |
 | Hub peering | External (manual) | Vending pipeline (automatic) |
 | NSG + UDR | This module (`network.tf`) | Vending pipeline / AVNM security admin rules |
-| Input to this module | `enable_byo_vnet = true` | `enable_byo_vnet = false` + external subnet ID variables (extension needed) |
-| Terraform provider | `azapi` | Vending uses `azurerm`, this module uses `azapi` — separate states |
+| Input to this module | `enable_byo_vnet = true` | `enable_byo_vnet = true` + external subnet ID variables |
+| Terraform provider | `azapi` | Vending uses `azurerm`, this module uses `azapi`  - separate states |
 
 ---
 
@@ -751,11 +738,14 @@ terraform plan
 terraform apply
 ```
 
-### Scenario 1: BYO VNet + NAT Gateway
+### Scenario 1: External Subnets + UDR through Hub Firewall (Corp default)
 
 ```hcl
-enable_byo_vnet = true
-egress_type     = "userAssignedNATGateway"
+enable_byo_vnet            = true
+external_node_subnet_id      = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-nodes"
+external_apiserver_subnet_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-apiserver"
+firewall_private_ip          = "10.0.1.4"
+# egress_type defaults to "userDefinedRouting"
 ```
 
 ### Scenario 2: BYO VNet + UDR through Hub Firewall (ALZ Corp)
@@ -800,7 +790,7 @@ kubectl get nodes
 
 ## Usage Example
 
-The following shows the core `main.tf` AKS Automatic resource as deployed by this module. This is the actual azapi resource body — not a simplified example.
+The following shows the core `main.tf` AKS Automatic resource as deployed by this module. This is the actual azapi resource body  - not a simplified example.
 
 ```hcl
 resource "azapi_resource" "aks" {
@@ -934,7 +924,7 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** (open-source). This i
 
 ### Karpenter NodePool and AKSNodeClass Configuration
 
-After cluster deployment, customise node provisioning behaviour by creating Karpenter CRDs. These are not managed by Terraform — they are Kubernetes-native resources applied via `kubectl`.
+After cluster deployment, customise node provisioning behaviour by creating Karpenter CRDs. These are not managed by Terraform  - they are Kubernetes-native resources applied via `kubectl`.
 
 ```yaml
 # Example: GPU-optimised NodePool for AI/ML workloads
@@ -986,12 +976,24 @@ Key Karpenter selectors for AKS:
 
 ### CI/CD Access to Private Clusters
 
-When `enable_private_cluster = true`, the API server is not reachable from the public internet. CI/CD pipelines need private network access:
+When `enable_private_cluster = true`, the API server is not reachable from the public internet. CI/CD pipelines require private network connectivity.
 
-- **Self-hosted agents** (Azure DevOps / GitHub Actions) deployed in the spoke VNet or a peered VNet
-- **Azure Bastion** for interactive kubectl sessions from the hub
-- **`az aks command invoke`** for one-off commands without direct network access (requires Azure CLI auth, not kubectl)
-- Microsoft-hosted agents do **not** work with private clusters
+**GitHub Actions options:**
+
+- **GitHub-hosted VNet-integrated runners** (GitHub Enterprise Cloud): runners execute inside your Azure VNet with no public exposure. See [martinopedal/ghec-vnet-runners-azure](https://github.com/martinopedal/ghec-vnet-runners-azure) for a Terraform module that deploys this pattern.
+- **Self-hosted runners on Azure Container Apps**: runners deployed in the spoke VNet or a peered VNet with UDR egress through the hub firewall. See [martinopedal/terraform-azurerm-github-runners-alz-corp](https://github.com/martinopedal/terraform-azurerm-github-runners-alz-corp) for an ALZ Corp-optimised module.
+- **AVM CI/CD Agents and Runners pattern module**: the official AVM module for self-hosted agents supports both Azure DevOps and GitHub Actions on Azure Container Apps/Instances. See [martinopedal/terraform-azurerm-avm-ptn-cicd-agents-and-runners](https://github.com/martinopedal/terraform-azurerm-avm-ptn-cicd-agents-and-runners).
+
+**Azure DevOps options:**
+
+- Self-hosted agents on Container Apps or VMs in the spoke VNet or a peered VNet.
+- The AVM CI/CD pattern module listed above supports Azure DevOps agents.
+
+**Other access methods:**
+
+- `az aks command invoke` for one-off commands without direct network access (requires Azure CLI auth, not kubectl).
+- Azure Bastion for interactive kubectl sessions via the hub.
+- Microsoft-hosted agents (both Azure DevOps and GitHub Actions) do **not** work with private clusters.
 
 ### Backup and Disaster Recovery
 
@@ -999,17 +1001,34 @@ AKS Automatic does not provide built-in backup. Consider:
 
 - **Azure Backup for AKS** (managed offering) for scheduled backup of cluster resources and persistent volumes
 - **Velero** (open-source) with Azure Blob Storage as the backup target, using Workload Identity for auth
-- **GitOps** (Flux/ArgoCD) for declarative cluster state recovery — workload manifests are redeployable from Git
+- **GitOps** (Flux/ArgoCD) for declarative cluster state recovery  - workload manifests are redeployable from Git
 - Persistent volume snapshots via the Disk CSI Snapshot Controller (enabled by default)
 - For multi-region DR: deploy a second AKS Automatic cluster in a paired region. Use Azure Front Door or Traffic Manager for failover. Container images should be replicated via ACR geo-replication.
 
-### Cost Considerations
+### Cost Management
 
-- AKS Automatic always runs at **Standard tier** (uptime SLA charges apply)
-- Clusters **cannot be stopped/deallocated** — compute charges are continuous
-- Karpenter optimises cost via bin packing and consolidation, but idle clusters still incur node charges
-- Use **Spot VMs** via Karpenter NodePool (`karpenter.sh/capacity-type: spot`) for fault-tolerant workloads to reduce cost
-- The `metricsProfile.costAnalysis` property can be enabled for detailed per-resource cost breakdown in Azure Cost Management
+**Platform-level costs:**
+
+- AKS Automatic always runs at Standard tier. Uptime SLA charges apply.
+- Clusters cannot be stopped or deallocated. Compute charges are continuous.
+- Karpenter optimises cost through bin packing and consolidation, but idle clusters still incur node charges.
+- Use Spot VMs via Karpenter NodePool (`karpenter.sh/capacity-type: spot`) for fault-tolerant workloads.
+
+**Azure-native cost visibility:**
+
+- Enable `metricsProfile.costAnalysis` on the cluster for per-namespace and per-workload cost breakdown in Azure Cost Management.
+- Azure Cost Management provides cost allocation by resource group, tags, and AKS namespaces when cost analysis is enabled.
+- Azure Advisor generates right-sizing and reservation recommendations for AKS node VMs.
+
+**In-cluster cost management tools:**
+
+| Tool | Type | Integration |
+|---|---|---|
+| [AKS Cost Analysis](https://learn.microsoft.com/azure/aks/cost-analysis) | Azure-native | Built into Azure portal. Requires `metricsProfile.costAnalysis` enabled on the cluster. Shows cost by namespace, controller, and node pool. |
+| [OpenCost](https://www.opencost.io/) | Open-source (CNCF) | Deploys as a pod. Allocates real cluster cost to namespaces and workloads. Integrates with Prometheus. No license cost. |
+| [Kubecost](https://www.kubecost.com/) | Commercial (free tier available) | Extends OpenCost with savings recommendations, alerting, and governance. Available via Azure Marketplace. |
+
+For ALZ Corp deployments, AKS Cost Analysis is the recommended starting point as it requires no in-cluster components and integrates with Azure Cost Management for cross-resource reporting.
 
 ### Workload Identity Federation
 

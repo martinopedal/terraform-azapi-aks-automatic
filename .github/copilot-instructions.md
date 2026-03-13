@@ -14,6 +14,22 @@ terraform plan              # Preview changes (requires Azure auth)
 terraform apply             # Deploy (requires Azure auth)
 ```
 
+## Documentation Sources
+
+Always fetch the latest documentation from official sources before making claims about AKS Automatic features, limitations, or regional availability. Do not rely on training data or cached knowledge.
+
+Key sources to validate against:
+- [AKS Automatic overview](https://learn.microsoft.com/azure/aks/intro-aks-automatic)
+- [API Server VNet Integration](https://learn.microsoft.com/azure/aks/api-server-vnet-integration)
+- [Private AKS clusters](https://learn.microsoft.com/azure/aks/private-clusters)
+- [NAP limitations](https://learn.microsoft.com/azure/aks/node-auto-provisioning)
+- [AKS outbound rules](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress)
+- [AGC components](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components)
+- [Application Routing add-on](https://learn.microsoft.com/azure/aks/app-routing)
+- [Azure Products by Region](https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/)
+
+Use the `azure-mcp-documentation` MCP tool with `microsoft_docs_fetch` to retrieve current page content when validating claims.
+
 No test framework is configured. Validate changes with `terraform validate`. Always run `terraform validate` after any code modification before committing.
 
 ## Architecture
@@ -181,3 +197,18 @@ The `body` block in `azapi_resource.aks` mirrors the ARM REST API structure exac
 ### Tags
 
 All resources receive `local.tags`. Don't hardcode tags on individual resources — pass them through the local.
+
+## Validation Checklist
+
+Before committing changes, run the following:
+
+1. `terraform init && terraform validate` — all code changes must pass
+2. `terraform fmt -check -recursive` — formatting must be consistent
+3. Verify Mermaid diagram in README.md renders correctly on GitHub (no stale AGC flows, correct DNS zone format, Corp ingress via App Routing internal LB)
+4. Verify DrawIO source (`docs/alz-corp-aks-automatic.drawio`) and SVG (`docs/alz-corp-aks-automatic.drawio.svg`) are consistent with README content
+5. Validate all claims against current Microsoft Learn documentation using the azure-mcp-documentation tool — do not rely on cached knowledge for AKS Automatic features, limitations, or regional availability
+6. Check that RBAC role assignments use the correct identity (kubelet for AcrPull, App Routing add-on for Key Vault Certificate User, cluster identity for Network Contributor)
+7. Confirm Private DNS Zone format is `private.<region>.azmk8s.io` for VNet-integrated clusters (not `privatelink.`)
+8. Ensure no NAT Gateway resources or variables remain in the Terraform code (Corp = hub firewall egress only)
+9. Verify egress FQDN list matches current AKS outbound rules documentation
+10. Cross-check the regional availability matrix against the Azure Products by Region page
