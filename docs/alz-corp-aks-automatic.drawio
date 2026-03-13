@@ -8,7 +8,7 @@
         <!-- ================================================================ -->
         <!-- TITLE -->
         <!-- ================================================================ -->
-        <mxCell id="title" value="&lt;b&gt;AKS Automatic in ALZ Corp (Private Connectivity)&lt;/b&gt;&#xa;All traffic is private – no public endpoints. Egress forced through hub Azure Firewall via UDR." style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=0;fontSize=14;fontColor=#333333;" vertex="1" parent="1">
+        <mxCell id="title" value="&lt;b&gt;AKS Automatic in ALZ Corp (Private Connectivity)&lt;/b&gt;&#xa;Egress forced through hub Azure Firewall via UDR. Ingress via App Routing internal LB." style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=0;fontSize=14;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="700" y="15" width="900" height="45" as="geometry" />
         </mxCell>
 
@@ -88,7 +88,7 @@
         <mxCell id="hub-dns-label" value="&lt;b&gt;Private DNS Zones&lt;/b&gt; (linked to Hub + Spoke VNets)" style="text;html=1;align=center;fontSize=9;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="310" y="458" width="320" height="15" as="geometry" />
         </mxCell>
-        <mxCell id="hub-dns-aks" value="privatelink.&lt;region&gt;.azmk8s.io" style="text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;" vertex="1" parent="1">
+        <mxCell id="hub-dns-aks" value="private.&lt;region&gt;.azmk8s.io&#10;(VNet-integrated private cluster)" style="text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;" vertex="1" parent="1">
           <mxGeometry x="310" y="478" width="200" height="14" as="geometry" />
         </mxCell>
         <mxCell id="hub-dns-acr" value="privatelink.azurecr.io" style="text;html=1;fontSize=8;fontColor=#333333;align=left;spacingLeft=5;" vertex="1" parent="1">
@@ -264,7 +264,7 @@
         <mxCell id="spoke-api-snet-label" value="&lt;b&gt;snet-aks-apiserver&lt;/b&gt;  10.10.4.0/28  |  Delegated: Microsoft.ContainerService/managedClusters" style="text;html=1;align=left;fontSize=8;fontColor=#333333;spacingLeft=5;" vertex="1" parent="1">
           <mxGeometry x="785" y="523" width="380" height="14" as="geometry" />
         </mxCell>
-        <mxCell id="aks-apiserver" value="K8s API Server&#10;(VNet integrated,&#10;private FQDN)" style="shape=mxgraph.azure.kubernetes;fillColor=#326CE5;fontColor=#FFFFFF;strokeColor=none;fontSize=7;" vertex="1" parent="1">
+        <mxCell id="aks-apiserver" value="K8s API Server&#10;(VNet integrated ILB)" style="shape=mxgraph.azure.kubernetes;fillColor=#326CE5;fontColor=#FFFFFF;strokeColor=none;fontSize=7;" vertex="1" parent="1">
           <mxGeometry x="830" y="542" width="45" height="40" as="geometry" />
         </mxCell>
 
@@ -367,7 +367,7 @@
         <!-- ================================================================ -->
         <!-- TRAFFIC FLOW 1 – INGRESS (corp user → app via AGC) -->
         <!-- ================================================================ -->
-        <mxCell id="tf-in-1" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#107C10;" edge="1" parent="1" source="onprem-user" target="agc-frontend">
+        <mxCell id="tf-in-1" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#107C10;" edge="1" parent="1" source="onprem-user" target="aks-approuting">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="120" y="285" />
@@ -376,7 +376,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="tf-in-1-label" value="❶ Corp user → AGC Private Frontend (via ER + peering, DNS resolves to private IP)" style="text;html=1;align=left;fontSize=7;fontColor=#107C10;fontStyle=1;" vertex="1" parent="1">
+        <mxCell id="tf-in-1-label" value="❶ Corp user → Internal LB → App Routing NGINX (via ER + peering)" style="text;html=1;align=left;fontSize=7;fontColor=#107C10;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="500" y="173" width="400" height="14" as="geometry" />
         </mxCell>
 
@@ -478,7 +478,7 @@
         <mxCell id="legend-title" value="&lt;b&gt;Traffic Flows&lt;/b&gt;" style="text;html=1;fontSize=9;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="790" y="723" width="80" height="15" as="geometry" />
         </mxCell>
-        <mxCell id="l1" value="&lt;font color=&quot;#107C10&quot;&gt;━━&lt;/font&gt; ❶❷ Ingress: Corp User → AGC Private Frontend → ALB Controller → Pods" style="text;html=1;fontSize=8;" vertex="1" parent="1">
+        <mxCell id="l1" value="&lt;font color=&quot;#107C10&quot;&gt;━━&lt;/font&gt; ❶❷ Ingress: Corp User → Internal LB → App Routing NGINX → Pods" style="text;html=1;fontSize=8;" vertex="1" parent="1">
           <mxGeometry x="790" y="742" width="400" height="14" as="geometry" />
         </mxCell>
         <mxCell id="l2" value="&lt;font color=&quot;#E83123&quot;&gt;╌╌&lt;/font&gt; ❸❹ Egress: Pods → UDR → Hub Azure Firewall (FQDN tag) → Internet" style="text;html=1;fontSize=8;" vertex="1" parent="1">
