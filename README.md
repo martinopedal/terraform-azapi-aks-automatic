@@ -43,7 +43,7 @@ This repository contains a Terraform root module that deploys an **AKS Automatic
 
 The module supports:
 
-- BYO VNet with four subnets (nodes, API server, AGC, private endpoints)
+- BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints); this module currently implements the node and API server subnets, with AGC and private endpoint subnets added as needed
 - Three egress options: NAT Gateway, Standard Load Balancer, User-Defined Routing (hub firewall)
 - Three ingress options: Application Gateway for Containers, Application Routing add-on, Istio
 - Private cluster with VNet-integrated API server
@@ -110,14 +110,14 @@ flowchart TB
                 subgraph AKS["AKS Automatic\nsku:Automatic tier:Standard"]
                     Preconfig["CNI Overlay + Cilium\nWorkload Identity + OIDC\nAzure RBAC + Image Cleaner\nDeployment Safeguards"]
                     NAP["Karpenter NAP\nSystem + User NodePools\nKEDA + VPA + HPA"]
-                    IngressCtrl["ALB Controller - AGC\nApp Routing - NGINX\nIstio Gateway"]
+                    IngressCtrl["App Routing NGINX\n(Ingress API)\nIstio Gateway (optional)"]
                     Pods["Workload Pods\n10.244.0.0/16"]
                 end
             end
             APISnet["snet-aks-apiserver 10.10.4.0/28\nDelegated to ContainerService\nPrivate API Server"]
             subgraph AGCSnet["snet-agc 10.10.8.0/24\nDelegated to ServiceNetworking"]
                 AGC["App Gateway for Containers\nGateway API + WAF"]
-                AGCFrontend["Private Frontend"]
+                AGCFrontend["Public Frontend"]
             end
             subgraph PESnet["snet-private-endpoints 10.10.12.0/24"]
                 ACR["ACR"]
@@ -212,7 +212,9 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** with eBPF-based data 
 
 ### Ingress
 
-AKS Automatic supports three ingress options. All use the **Kubernetes Gateway API** (`GatewayClass`, `Gateway`, `HTTPRoute`). The legacy `Ingress` resource type is being superseded by Gateway API and should not be used for new deployments.
+AKS Automatic supports three ingress options, but they do not all use the same API model today. AGC uses the Kubernetes Gateway API. Application Routing currently uses Kubernetes `Ingress` resources. The AKS Istio add-on currently uses Istio CRDs for ingress and traffic management.
+
+> **Ingress NGINX retirement notice:** The upstream Ingress NGINX project maintenance ended March 2026. Microsoft provides security patches for the Application Routing add-on NGINX through November 2026. AKS is migrating to the Kubernetes Gateway API as the long-term ingress standard. Plan migration to AGC (when private IP ships) or other Gateway API-compatible controllers.
 
 #### Application Gateway for Containers (Gateway API, L7)
 
@@ -238,30 +240,30 @@ Client -> AGC Public Frontend -> ALB Controller -> Pods
 | Identity | `applicationloadbalancer-<cluster>` managed identity, auto-configured by add-on |
 | Deployment modes | ALB-managed (`ApplicationLoadBalancer` CRD) or BYO (Terraform/ARM provisioned) |
 
-#### Application Routing Add-on (managed NGINX, preconfigured) - recommended for ALZ Corp
+#### Application Routing Add-on (managed NGINX / Ingress API, preconfigured) - recommended for ALZ Corp
 
-Always enabled on AKS Automatic. Deploys a managed NGINX-based controller supporting Gateway API. Supports **internal Azure Load Balancer** for fully private ingress.
+Always enabled on AKS Automatic. Deploys a managed NGINX-based controller that currently uses `Ingress` resources with `ingressClassName: webapprouting.kubernetes.azure.com`. Supports **internal Azure Load Balancer** for fully private ingress.
 
 ```
-Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing NGINX -> Pods
+Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing Ingress -> Pods
 ```
 
 | Feature | Configuration |
 |---|---|
-| Gateway API | `Gateway` + `HTTPRoute` with `webapprouting.kubernetes.azure.com` GatewayClass |
+| Current API | `Ingress` with `ingressClassName: webapprouting.kubernetes.azure.com` |
 | DNS integration | `ingressProfile.webAppRouting.dnsZoneResourceIds` (public and private zones) |
-| TLS from Key Vault | Reference certs in `Gateway` listener config, automatic rotation |
+| TLS from Key Vault | Reference certs on `Ingress` resources with `kubernetes.azure.com/tls-cert-keyvault-uri`, automatic rotation |
 | Internal-only | `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation on Service |
 | Private frontend | ✅ Fully supported via internal Azure Load Balancer |
 
-Corp considerations: Configure as internal LB only. Create DNS records in the hub Private DNS Zone pointing to the internal LB IP. This is the recommended ingress for ALZ Corp until AGC adds private IP frontend support.
+Corp considerations: Configure as internal LB only. Create DNS records in the hub Private DNS Zone pointing to the internal LB IP. This is the recommended ingress for ALZ Corp until AGC adds private IP frontend support. AKS will evolve Application Routing toward Gateway API alignment, but it does not use `GatewayClass`, `Gateway`, or `HTTPRoute` today.
 
 #### Istio Service Mesh Ingress Gateway (optional)
 
-Envoy-based ingress supporting Gateway API natively. Supports **internal mode** for fully private ingress.
+Envoy-based ingress for service mesh scenarios. Traffic management uses Istio `VirtualService` and `DestinationRule` CRDs, and ingress exposure is configured via the Istio `Gateway` CRD (not the Kubernetes Gateway API). Supports **internal mode** for fully private ingress.
 
 ```
-Corp User -> ExpressRoute -> Peering -> Internal Istio Gateway -> HTTPRoute -> Pods
+Corp User -> ExpressRoute -> Peering -> Internal Istio Gateway -> VirtualService -> Pods
 ```
 
 | Component | Configuration |
@@ -269,18 +271,18 @@ Corp User -> ExpressRoute -> Peering -> Internal Istio Gateway -> HTTPRoute -> P
 | Enable | `serviceMeshProfile.mode = "Istio"` |
 | Ingress gateway | `istio.components.ingressGateways[].enabled = true` |
 | Internal mode | Set `mode: "Internal"` for corp-only access |
-| Gateway API | `Gateway` + `HTTPRoute` with Istio GatewayClass |
+| Current API | Istio `Gateway`, `VirtualService`, and `DestinationRule` CRDs |
 | mTLS | `PeerAuthentication` CRDs |
 | Private frontend | ✅ Fully supported via internal Azure Load Balancer |
 
-Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub firewall must allow return traffic to the Istio LB frontend IP.
+Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub firewall must allow return traffic to the Istio LB frontend IP. Kubernetes Gateway API support in the AKS Istio add-on is planned but not yet available.
 
 #### Ingress Comparison
 
 | | AGC | App Routing (NGINX) | Istio Gateway |
 |---|---|---|---|
 | Preconfigured | No (add-on) | Yes | No (opt-in) |
-| Gateway API | ✅ | ✅ | ✅ |
+| Gateway API | ✅ | Ingress API (Gateway API planned) | Istio Gateway CRD (K8s Gateway API planned) |
 | L7 features | WAF, mTLS, rewrites, traffic splits | Host/path routing, TLS | Traffic mgmt, mTLS, fault injection |
 | Private IP frontend | ❌ not yet supported | ✅ internal LB | ✅ internal mode |
 | ALZ Corp recommended | ❌ until private IP ships | **✅ Primary for Corp** | ✅ Service mesh scenarios |
@@ -336,16 +338,19 @@ Pods -> Node -> UDR 0.0.0.0/0 -> Hub Azure Firewall -> Internet
 
 | FQDN | Port | Purpose |
 |---|---|---|
-| `*.hcp.<region>.azmk8s.io` | 443 | API server communication |
+| `*.hcp.<region>.azmk8s.io` | 443 | API server communication for public clusters |
 | `mcr.microsoft.com` | 443 | System container images |
 | `*.data.mcr.microsoft.com` | 443 | MCR data endpoint |
+| `mcr-0001.mcr-msedge.net` | 443 | MCR CDN endpoint |
 | `management.azure.com` | 443 | Azure Resource Manager |
 | `login.microsoftonline.com` | 443 | Entra ID authentication |
 | `packages.microsoft.com` | 443 | Azure Linux packages |
-| `acs-mirror.azurelinux.com` | 443 | Azure Linux mirror |
+| `acs-mirror.azureedge.net` | 443 | Azure Linux mirror |
 | `dc.services.visualstudio.com` | 443 | Container Insights telemetry |
 | `*.monitoring.azure.com` | 443 | Managed Prometheus |
 | `*.ods.opinsights.azure.com` | 443 | Log Analytics ingestion |
+
+> **Note:** `*.hcp.<region>.azmk8s.io` is not required for private clusters.
 
 Additional rules beyond the FQDN tag:
 
@@ -376,7 +381,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Workload Identity | Entra Workload ID | No |
 | OIDC Issuer | Enabled | No |
 | API server VNet integration | Enabled | No |
-| Image Cleaner | Enabled, default 48h interval | Yes - `image_cleaner_interval_hours` |
+| Image Cleaner | Enabled, default 7-day interval | Yes - `image_cleaner_interval_hours` |
 | Deployment Safeguards | Azure Policy, Warning mode | No (severity adjustable via Policy) |
 | Defender for Containers | Optional | Yes - `securityProfile.defender` |
 | Azure Key Vault KMS | Optional | Yes - `securityProfile.azureKeyVaultKms` |
@@ -384,7 +389,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Private cluster | Optional | Yes - `enable_private_cluster` |
 | Authorised IP ranges | Optional | Yes - `authorized_ip_ranges` |
 
-> **Custom CA trust certificates + NAP caveat:** On AKS versions prior to v20260408 (February 2026), `securityProfile.customCATrustCertificates` is silently ignored on nodes provisioned by NAP/Karpenter. Since AKS Automatic exclusively uses NAP, custom CA certs will not be applied to any nodes unless the cluster is running AKS >= v20260408. Verify your cluster version before relying on this setting. See [GitHub issue #5353](https://github.com/Azure/AKS/issues/5353).
+> **Custom CA trust certificates:** Supported on NAP-enabled AKS Automatic clusters starting with AKS release v20260408. Use `securityProfile.customCATrustCertificates` only when the cluster version is >= v20260408. See [GitHub issue #5353](https://github.com/Azure/AKS/issues/5353).
 
 ### Monitoring and Observability
 
@@ -476,21 +481,23 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 
 ## BYO VNet Topology
 
+This section shows the target ALZ Corp topology. The module currently implements the node and API server subnets. Add the AGC and private-endpoint subnets when deploying AGC or PaaS services that use private endpoints.
+
 ```
 Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
 
   snet-aks-nodes         10.10.0.0/22    NSG + UDR -> Hub Firewall
     AKS Automatic cluster
       System Pool + Karpenter NodePools (Azure Linux)
-      App Routing (NGINX) | ALB Controller (AGC) | Istio
+      App Routing (Ingress API) | Istio | AGC (optional, public frontend today)
       Pods (overlay: 10.244.0.0/16, services: 10.245.0.0/16)
 
   snet-aks-apiserver     10.10.4.0/28    Delegated: Microsoft.ContainerService/managedClusters
     K8s API Server (VNet integrated ILB; FQDN: <cluster>-<hash>.<region>.azmk8s.io)
-    Private cluster adds privatelink prefix to FQDN
+    Private cluster uses the private.<region>.azmk8s.io DNS zone
 
   snet-agc               10.10.8.0/24    Delegated: Microsoft.ServiceNetworking/trafficControllers
-    Application Gateway for Containers (private frontend)
+    Application Gateway for Containers (public frontend today)
 
   snet-private-endpoints 10.10.12.0/24
     Private Endpoints: ACR, Key Vault, Storage, SQL/CosmosDB
@@ -567,7 +574,7 @@ The `privateDNSZone` property (ARM) / `--private-dns-zone` flag (CLI) controls z
 - The cluster managed identity requires `Private DNS Zone Contributor` and `Network Contributor` on the zone.
 - On-premises DNS servers need a conditional forwarder for `private.<region>.azmk8s.io` to Azure DNS (`168.63.129.16`) via the hub.
 - For public VNet-integrated clusters: no Private DNS Zone is needed. Restrict external access using `authorized_ip_ranges`.
-- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `DNS Zone Contributor` on those zones.
+- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `Private DNS Zone Contributor` on private zones and `DNS Zone Contributor` on public zones.
 - For AGC frontends: add a CNAME in the appropriate Private DNS Zone pointing to the generated `*.appgw.azure.com` FQDN.
 
 **Sources:**
@@ -588,7 +595,7 @@ The `AzureKubernetesService` FQDN tag on Azure Firewall covers most AKS system r
 - Container registries: `<acr-name>.azurecr.io`, `ghcr.io`, `docker.io`
 - Helm chart repositories
 - External APIs consumed by workloads
-- Azure Linux packages: `packages.microsoft.com`, `acs-mirror.azurelinux.com`
+- Azure Linux packages: `packages.microsoft.com`, `acs-mirror.azureedge.net`, `mcr-0001.mcr-msedge.net`
 
 If the ALZ uses a third-party NVA instead of Azure Firewall, the `AzureKubernetesService` FQDN tag is not available. Each required FQDN must be whitelisted individually per the [AKS required outbound rules](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress).
 
@@ -633,8 +640,9 @@ The cluster's SystemAssigned managed identity requires the following role assign
 | Role | Scope | Purpose |
 |---|---|---|
 | `Network Contributor` | BYO VNet and subnets | Node provisioning, subnet joins |
-| `DNS Zone Contributor` | DNS zones in connectivity subscription | Application Routing DNS record management |
-| `Key Vault Secrets User` | Key Vault(s) for TLS certs | Application Routing TLS certificate retrieval |
+| `Private DNS Zone Contributor` | Private DNS zones in connectivity subscription | Application Routing private DNS record management |
+| `DNS Zone Contributor` | Public DNS zones | Application Routing public DNS record management |
+| `Key Vault Certificate User` | Key Vault(s) for TLS certs | Application Routing TLS certificate retrieval |
 | `AcrPull` | Azure Container Registry | Pull application container images |
 
 In ALZ, these are cross-subscription RBAC assignments that must be managed by the platform team or a separate Terraform state.

@@ -173,7 +173,7 @@ variable "enable_private_cluster" {
 variable "private_dns_zone_id" {
   description = <<-EOT
     Resource ID of a pre-created private DNS zone for the private API server FQDN.
-    Only used when enable_private_cluster = true.
+    Only used when enable_private_cluster = true. Custom zones require a UserAssigned managed identity on the AKS cluster.
       - null (default) : AKS creates a private.<region>.azmk8s.io zone in the node resource group (privateDNSZone = "system").
       - "<resource-id>": Use a pre-created zone, e.g. in the ALZ connectivity subscription. Format: private.<region>.azmk8s.io.
       - "none"         : No private DNS zone. API server reachable only if public access is also enabled.
@@ -203,9 +203,9 @@ variable "enable_prometheus" {
 # =============================================================================
 
 variable "image_cleaner_interval_hours" {
-  description = "Interval (hours) for the Image Cleaner to scan and remove unused vulnerable images."
+  description = "Interval (hours) for the Image Cleaner to scan and remove unused vulnerable images. Default 168 hours (7 days)."
   type        = number
-  default     = 48
+  default     = 168
 }
 
 # =============================================================================
