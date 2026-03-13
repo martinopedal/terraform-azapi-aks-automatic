@@ -218,7 +218,7 @@ AKS Automatic supports three ingress options, but they do not all use the same A
 
 #### Application Gateway for Containers (Gateway API, L7)
 
-> **Limitation (as of March 2026):** AGC frontends do **not** support private IP addresses. Frontends only expose a public FQDN. Private IP frontend support is expected but has no committed ETA. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
+> **Limitation (as of March 2026):** AGC frontends do **not** support private IP addresses. Frontends only expose a public FQDN. Based on public signals from the AGC product team, private ingress support is actively in development and is expected in the near future. No official timeline or GA date has been committed — plan accordingly and do not take dependencies on unannounced features. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
 >
 > For ALZ Corp scenarios requiring fully private ingress today, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode**.
 
@@ -650,6 +650,33 @@ In ALZ, these are cross-subscription RBAC assignments that must be managed by th
 ### Monitoring Integration
 
 ALZ deploys a central Log Analytics workspace in the management subscription. To forward AKS Container Insights and Prometheus data to the central workspace, the workspace resource ID must be added to the cluster's `azureMonitorProfile` or `addonProfiles`. This module does not currently wire central workspace integration. Extend `main.tf` if centralised logging is required.
+
+### If Using ALZ Subscription Vending with AVNM IPAM
+
+If the ALZ platform uses the [AVM Subscription Vending module](https://github.com/Azure/bicep-registry-modules/tree/main/avm/ptn/lz/sub-vending) to provision application landing zone subscriptions, and the network team has customised it with [Azure Virtual Network Manager (AVNM) IPAM](https://learn.microsoft.com/azure/virtual-network-manager/concept-ip-address-management) for centralised IP address allocation, the following considerations change compared to the default BYO VNet path documented above.
+
+**VNet and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, and UDR as part of the landing zone provisioning — before this AKS module runs. This module's `enable_byo_vnet = true` path (which creates its own VNet in `network.tf`) would conflict with that. Instead, set `enable_byo_vnet = false` and pass the pre-existing subnet resource IDs directly. This requires adding `node_subnet_id` and `apiserver_subnet_id` input variables to `locals.tf` to replace the current `azapi_resource.node_subnet[0].id` references. The module does not implement this path today — it is a documented extension point.
+
+**CIDR ranges are allocated from AVNM IPAM pools, not manually.** The `vnet_address_space`, `node_subnet_address_prefix`, and `apiserver_subnet_address_prefix` variables become irrelevant — the vending pipeline controls these via IPAM pool reservations. The overlay CIDRs (`pod_cidr`, `service_cidr`) are not part of the VNet address space (they exist in the overlay) but still must not overlap with any routable address space in the IPAM plan. Coordinate these with the network team.
+
+**Subnet delegations must be configured in the vending pipeline.** The API server subnet requires delegation to `Microsoft.ContainerService/managedClusters` and the AGC subnet requires delegation to `Microsoft.ServiceNetworking/trafficControllers`. These delegations must be part of the vending module's subnet definitions, not applied by this module after the fact.
+
+**Peering and route tables are handled by the vending pipeline.** The subscription vending module typically creates hub-spoke peering and attaches the UDR (pointing to the hub firewall) to the node subnet as part of provisioning. The NSG, route table, and NAT Gateway resources in `network.tf` are not needed.
+
+**Terraform state boundaries.** The vending module uses `azurerm` (AVM convention). This module uses `azapi`. They operate in separate Terraform states. Pass subnet IDs as input variables — do not use `data` source lookups across states, as that creates implicit dependencies that break when the vending pipeline runs independently.
+
+**Summary of what changes:**
+
+| Concern | Default BYO VNet (this module) | Subscription Vending + AVNM IPAM |
+|---|---|---|
+| VNet creation | This module (`network.tf`) | Vending pipeline |
+| Subnet creation | This module (`network.tf`) | Vending pipeline |
+| CIDR allocation | Manual (`variables.tf` defaults) | AVNM IPAM pools |
+| Subnet delegations | This module (`network.tf`) | Vending pipeline subnet definitions |
+| Hub peering | External (manual) | Vending pipeline (automatic) |
+| NSG + UDR | This module (`network.tf`) | Vending pipeline / AVNM security admin rules |
+| Input to this module | `enable_byo_vnet = true` | `enable_byo_vnet = false` + external subnet ID variables (extension needed) |
+| Terraform provider | `azapi` | Vending uses `azurerm`, this module uses `azapi` — separate states |
 
 ---
 
