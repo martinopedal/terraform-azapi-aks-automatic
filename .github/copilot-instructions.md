@@ -1,4 +1,4 @@
-# Copilot Instructions – AKS Automatic (azapi)
+# Copilot Instructions - AKS Automatic (azapi)
 
 ## What this repo is
 
@@ -58,8 +58,8 @@ Many properties in the body are **preconfigured by AKS Automatic** and cannot be
 
 Application Routing (managed NGINX) is preconfigured and always enabled. It currently uses Kubernetes `Ingress` resources with `ingressClassName: webapprouting.kubernetes.azure.com`. Upstream Ingress NGINX maintenance ended in March 2026, and Microsoft provides security fixes for the AKS add-on through November 2026 while AKS migrates toward Gateway API-aligned ingress. Key points when modifying ingress configuration:
 
-- `ingressProfile.webAppRouting.dnsZoneResourceIds` accepts both public (`Microsoft.Network/dnsZones`) and private (`Microsoft.Network/privateDnsZones`) zone IDs. When integrating with ALZ hub-spoke, use **private DNS zones hosted in the connectivity subscription** – pass their full resource IDs.
-- The managed NGINX controller needs the AKS managed identity to have `Private DNS Zone Contributor` on referenced private zones and `DNS Zone Contributor` on referenced public zones. This RBAC assignment is **not managed by this module** – it must be granted externally (e.g., by the ALZ platform team or a separate Terraform config).
+- `ingressProfile.webAppRouting.dnsZoneResourceIds` accepts both public (`Microsoft.Network/dnsZones`) and private (`Microsoft.Network/privateDnsZones`) zone IDs. When integrating with ALZ hub-spoke, use **private DNS zones hosted in the connectivity subscription** - pass their full resource IDs.
+- The managed NGINX controller needs the AKS managed identity to have `Private DNS Zone Contributor` on referenced private zones and `DNS Zone Contributor` on referenced public zones. This RBAC assignment is **not managed by this module** - it must be granted externally (e.g., by the ALZ platform team or a separate Terraform config).
 - TLS certificates from Azure Key Vault are consumed via `kubernetes.azure.com/tls-cert-keyvault-uri` annotations on `Ingress` resources, not via the ARM body. The cluster's managed identity needs `Key Vault Certificate User` on the vault.
 - Istio ingress gateway (`serviceMeshProfile`) creates an additional Azure Load Balancer. When using UDR egress, ensure the firewall allows return traffic to the LB frontend IP.
 
@@ -82,7 +82,7 @@ Egress type is the single most impactful networking decision. Caveats per option
 
 ---
 
-## Azure Landing Zone (ALZ) integration – caveats and considerations
+## Azure Landing Zone (ALZ) integration - caveats and considerations
 
 This module is designed to deploy into a **spoke subscription** within an Azure Landing Zone that uses [Azure Verified Modules (AVM) for Platform Landing Zones](https://aka.ms/alz/acc/tf). The following caveats apply:
 
@@ -100,11 +100,11 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
   - Other AKS clusters' overlay CIDRs if they share DNS or service mesh
 - Always coordinate CIDR ranges with the ALZ platform team before deployment. Update `variables.tf` defaults to match the allocated ranges.
 
-### DNS – Private DNS zones
+### DNS - Private DNS zones
 
 - AKS Automatic always uses API Server VNet Integration. The API server is an ILB in the delegated subnet, not a Private Endpoint. When `enable_private_cluster = true`, the FQDN becomes `<cluster>-<hash>.private.<region>.azmk8s.io` (note: `private.`, not `privatelink.` -- the `privatelink.` zone is the legacy non-VNet-integrated model). This requires a `private.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet. Without private cluster, no Private DNS Zone is needed for API server access.
 - In ALZ, Private DNS Zones are typically hosted in the **connectivity subscription** and managed by the platform team. Do **not** create duplicate Private DNS Zones in the spoke.
-- For Application Routing DNS integration, the `dns_zone_resource_ids` variable must point to zones the platform team has pre-created. The AKS managed identity needs `Private DNS Zone Contributor` on private zones and `DNS Zone Contributor` on public zones – this is a **cross-subscription RBAC assignment** that must be handled by the ALZ platform team or a separate Terraform state.
+- For Application Routing DNS integration, the `dns_zone_resource_ids` variable must point to zones the platform team has pre-created. The AKS managed identity needs `Private DNS Zone Contributor` on private zones and `DNS Zone Contributor` on public zones - this is a **cross-subscription RBAC assignment** that must be handled by the ALZ platform team or a separate Terraform state.
 
 ### Egress through hub firewall (UDR)
 
