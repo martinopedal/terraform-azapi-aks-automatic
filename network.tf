@@ -1,15 +1,16 @@
 # =============================================================================
-# BYO Virtual Network
+# Module-created Virtual Network
 #
-# When enable_byo_vnet = true this file creates:
+# This file is used only when enable_byo_vnet = true AND no external subnet IDs
+# are provided. In that standalone mode it creates:
 #   • VNet with configurable address space
-#   • Node subnet (with NSG, optional NAT Gateway / Route Table association)
+#   • Node subnet (with NSG and optional Route Table association)
 #   • API server subnet (delegated to Microsoft.ContainerService/managedClusters)
 #   • NSG (empty – AKS manages its own rules)
-#   • Egress resources depending on egress_type:
-#       - userAssignedNATGateway → Public IP + NAT Gateway
-#       - userDefinedRouting     → Route Table with 0.0.0.0/0 → NVA/Firewall
-#       - loadBalancer           → nothing extra (AKS uses the Standard LB)
+#   • Route Table resources when egress_type = userDefinedRouting
+#
+# In ALZ Corp vending mode, the spoke VNet, subnets, peering, UDR, and NSG are
+# pre-provisioned externally, so none of the resources in this file are created.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -57,8 +58,8 @@ resource "azapi_resource" "vnet" {
 # -----------------------------------------------------------------------------
 # Node Subnet
 #
-# Hosts the AKS worker nodes. Associated with the NSG, and optionally with
-# a NAT Gateway (recommended) or a Route Table (forced-tunnelling via NVA).
+# Hosts the AKS worker nodes. Associated with the NSG and, for
+# userDefinedRouting, a Route Table for forced-tunnelling via the hub firewall.
 # -----------------------------------------------------------------------------
 
 resource "azapi_resource" "node_subnet" {
@@ -75,11 +76,6 @@ resource "azapi_resource" "node_subnet" {
         id = azapi_resource.nsg[0].id
       }
 
-      # NAT Gateway association (egress_type = userAssignedNATGateway)
-      natGateway = local.create_nat_gateway ? {
-        id = azapi_resource.nat_gateway[0].id
-      } : null
-
       # Route Table association (egress_type = userDefinedRouting)
       routeTable = local.create_route_table ? {
         id = azapi_resource.route_table[0].id
@@ -88,7 +84,6 @@ resource "azapi_resource" "node_subnet" {
   }
 
   depends_on = [
-    azapi_resource.nat_gateway,
     azapi_resource.route_table,
   ]
 }
@@ -98,7 +93,7 @@ resource "azapi_resource" "node_subnet" {
 #
 # Dedicated subnet for API Server VNet Integration. Requires delegation to
 # Microsoft.ContainerService/managedClusters. Minimum size: /28.
-# This subnet MUST NOT have a NAT Gateway or Route Table association.
+# This subnet MUST NOT have a Route Table association.
 # -----------------------------------------------------------------------------
 
 resource "azapi_resource" "apiserver_subnet" {
@@ -127,61 +122,13 @@ resource "azapi_resource" "apiserver_subnet" {
 }
 
 # =============================================================================
-# Egress Option 1 – NAT Gateway  (recommended for production BYO VNet)
+# Egress – User-Defined Routing (forced-tunnelling through hub Azure Firewall)
 #
-# Provides deterministic, high-throughput outbound connectivity with a static
-# public IP. Each NAT Gateway supports up to 64k SNAT ports per IP address.
-# =============================================================================
-
-resource "azapi_resource" "nat_gateway_pip" {
-  count     = local.create_nat_gateway ? 1 : 0
-  type      = "Microsoft.Network/publicIPAddresses@2024-05-01"
-  name      = "pip-natgw-${var.cluster_name}"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
-  tags      = local.tags
-
-  body = {
-    sku = {
-      name = "Standard"
-      tier = "Regional"
-    }
-    properties = {
-      publicIPAllocationMethod = "Static"
-      publicIPAddressVersion   = "IPv4"
-    }
-  }
-}
-
-resource "azapi_resource" "nat_gateway" {
-  count     = local.create_nat_gateway ? 1 : 0
-  type      = "Microsoft.Network/natGateways@2024-05-01"
-  name      = "natgw-${var.cluster_name}"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
-  tags      = local.tags
-
-  body = {
-    sku = {
-      name = "Standard"
-    }
-    properties = {
-      idleTimeoutInMinutes = var.nat_gateway_idle_timeout
-      publicIpAddresses = [
-        { id = azapi_resource.nat_gateway_pip[0].id }
-      ]
-    }
-  }
-}
-
-# =============================================================================
-# Egress Option 2 – User-Defined Routing  (forced-tunnelling through NVA)
-#
-# All outbound traffic (0.0.0.0/0) is routed to a firewall / NVA. The NVA
-# must whitelist the AKS required egress endpoints:
+# ALZ Corp pattern: all spoke egress routes through the hub firewall via UDR.
+# The firewall must whitelist AKS required outbound FQDNs:
 #   https://learn.microsoft.com/azure/aks/outbound-rules-control-egress
 #
-# Set var.egress_type = "userDefinedRouting" and provide var.firewall_private_ip.
+# Set var.firewall_private_ip to the hub firewall's private IP.
 # =============================================================================
 
 resource "azapi_resource" "route_table" {
@@ -217,10 +164,3 @@ resource "azapi_resource" "route_table" {
   }
 }
 
-# =============================================================================
-# Egress Option 3 – Load Balancer
-#
-# No extra resources needed. AKS uses the Standard Load Balancer for SNAT.
-# This is the simplest option but offers fewer SNAT ports and no static
-# outbound IP. Suitable for dev/test scenarios.
-# =============================================================================

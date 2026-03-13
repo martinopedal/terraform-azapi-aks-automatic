@@ -61,13 +61,8 @@ output "apiserver_subnet_id" {
   value       = local.apiserver_subnet_id
 }
 
-output "nat_gateway_public_ip" {
-  description = "Resource ID of the NAT Gateway public IP (null when not using NAT GW egress)."
-  value       = try(azapi_resource.nat_gateway_pip[0].id, null)
-}
-
 output "egress_type" {
-  description = "The configured egress type."
+  description = "The resolved outbound type sent to AKS."
   value       = local.outbound_type
 }
 
@@ -83,4 +78,28 @@ output "resource_group_name" {
 output "resource_group_id" {
   description = "Resource ID of the resource group."
   value       = azapi_resource.rg.id
+}
+
+# =============================================================================
+# Supporting Services
+# =============================================================================
+
+output "acr_id" {
+  description = "Resource ID of the Azure Container Registry (null when create_acr = false)."
+  value       = try(azapi_resource.acr[0].id, null)
+}
+
+output "acr_login_server" {
+  description = "Login server hostname for the ACR (e.g. myacr.azurecr.io)."
+  value       = var.create_acr ? "${var.acr_name}.azurecr.io" : null
+}
+
+output "keyvault_id" {
+  description = "Resource ID of the Azure Key Vault (null when create_keyvault = false)."
+  value       = try(azapi_resource.keyvault[0].id, null)
+}
+
+output "pe_subnet_id" {
+  description = "Resource ID of the private endpoint subnet (module-created or external; null when not used)."
+  value       = local.pe_subnet_id
 }

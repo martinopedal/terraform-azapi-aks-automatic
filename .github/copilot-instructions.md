@@ -18,12 +18,13 @@ No test framework is configured. Validate changes with `terraform validate`. Alw
 
 ## Architecture
 
-The module has two modes controlled by `var.enable_byo_vnet`:
+The module supports three networking modes controlled by `var.enable_byo_vnet` and the external subnet ID variables:
 
-- **BYO VNet (`true`, default):** `network.tf` creates VNet, two subnets (node + API server with delegation), NSG, and egress resources. The egress path is selected by `var.egress_type` which conditionally creates a NAT Gateway + Public IP (`userAssignedNATGateway`), a Route Table (`userDefinedRouting`), or nothing extra (`loadBalancer`).
-- **Managed VNet (`false`):** All networking resources in `network.tf` are skipped (count = 0). AKS creates its own VNet with a managed NAT Gateway. Subnet-related locals resolve to `null`, and azapi strips null values from the ARM body.
+- **External subnets (`enable_byo_vnet = false` with external subnet IDs, default / recommended for Corp):** the ALZ vending pipeline pre-provisions the spoke VNet, subnets, peering, NSG, and UDR. `network.tf` is skipped, `dependencies.tf` creates ACR/Key Vault/private endpoints/RBAC, and `main.tf` passes the supplied subnet IDs to AKS.
+- **Module-created VNet (`enable_byo_vnet = true` without external subnet IDs):** `network.tf` creates the spoke VNet, node subnet, API server subnet, optional PE subnet, NSG, and UDR resources needed by the cluster.
+- **AKS-managed networking (`enable_byo_vnet = false` without external subnet IDs):** all resources in `network.tf` and the PE subnet are skipped, and AKS manages its own virtual network resources.
 
-The conditional logic lives in `locals.tf` (`create_network`, `create_nat_gateway`, `create_route_table`). These booleans drive `count` on every resource in `network.tf` and feed into `main.tf` via `local.node_subnet_id`, `local.apiserver_subnet_id`, and `local.outbound_type`.
+The conditional logic lives in `locals.tf` (`create_network`, `create_route_table`, `create_pe_subnet`). These booleans drive `count` on the resources in `network.tf` and `dependencies.tf`, and feed into `main.tf` via `local.node_subnet_id`, `local.apiserver_subnet_id`, `local.pe_subnet_id`, and `local.outbound_type`.
 
 ### Key resource: the AKS cluster (`main.tf`)
 
@@ -50,13 +51,8 @@ Application Routing (managed NGINX) is preconfigured and always enabled. It curr
 
 Egress type is the single most impactful networking decision. Caveats per option:
 
-### NAT Gateway (`userAssignedNATGateway`)
-- The NAT Gateway is associated to the **node subnet only**. The API server subnet must never have a NAT Gateway.
-- Each public IP provides 64k SNAT ports. For clusters with heavy outbound connections, add extra public IPs post-deployment.
-- The outbound IP is deterministic – useful for allowlisting on external services.
-
 ### User-Defined Routing / Firewall (`userDefinedRouting`)
-- `var.firewall_private_ip` must be set. The module creates a route table with `0.0.0.0/0 → VirtualAppliance`.
+- `var.firewall_private_ip` must be set. The module creates a route table with `0.0.0.0/0 → VirtualAppliance` when it owns the VNet; in vending mode the UDR is expected to be pre-associated to the node subnet.
 - The firewall/NVA **must** whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). Azure Firewall can use the built-in `AzureKubernetesService` FQDN tag.
 - Required outbound endpoints include: `mcr.microsoft.com`, `*.data.mcr.microsoft.com`, `mcr-0001.mcr-msedge.net`, management.azure.com, `login.microsoftonline.com`, `packages.microsoft.com`, `acs-mirror.azureedge.net`. Add `*.hcp.<region>.azmk8s.io` only for non-private clusters; private clusters do not require it.
 - For Azure Firewall: use a minimum of **20 frontend IPs** in production to avoid SNAT port exhaustion.
@@ -76,8 +72,8 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
 
 ### VNet and subnet ownership
 
-- In ALZ, the **connectivity subscription** typically owns the hub VNet and the platform team manages VNet peering. This module creates its own spoke VNet (`network.tf`). You must **peer this spoke VNet to the ALZ hub** externally — this module does not create peering resources.
-- If the ALZ platform team pre-provisions spoke VNets, disable BYO VNet (`enable_byo_vnet = false`) and instead supply the pre-created subnet IDs directly. This would require modifying `locals.tf` to accept external subnet ID variables instead of referencing `azapi_resource.node_subnet[0].id`.
+- In ALZ, the **connectivity subscription** typically owns the hub VNet and the platform team manages VNet peering. For Corp, the recommended pattern is to consume spoke subnets pre-provisioned by the vending pipeline: set `enable_byo_vnet = false` and pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id`.
+- If you are not using vending, set `enable_byo_vnet = true` so `network.tf` creates the spoke VNet and required subnets in this state. This module does not create hub peering resources.
 
 ### CIDR coordination with the ALZ IP plan
 
@@ -154,7 +150,8 @@ All Azure resources use `azapi_resource`. Do **not** introduce `azurerm_*` resou
 | `data.tf` | Data sources only |
 | `locals.tf` | All computed/derived values |
 | `variables.tf` | All input variables, grouped by section with `# ====` headers |
-| `network.tf` | All BYO VNet resources (conditionally created) |
+| `network.tf` | Module-created VNet resources (only when `enable_byo_vnet = true` and no external subnet IDs are supplied) |
+| `dependencies.tf` | ACR, Key Vault, private endpoints, private DNS zone groups, and RBAC |
 | `main.tf` | Resource group + AKS cluster |
 | `outputs.tf` | All outputs |
 
@@ -172,7 +169,7 @@ New resources go in the file matching their category. Don't create new `.tf` fil
 All conditional resources use `count` (not `for_each`) with boolean locals from `locals.tf`. The pattern is:
 
 ```hcl
-count = local.create_nat_gateway ? 1 : 0
+count = local.create_route_table ? 1 : 0
 ```
 
 Reference these resources with `[0]` indexing inside ternaries guarded by the same boolean, or use `try(..., null)` in outputs.

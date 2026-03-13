@@ -798,6 +798,221 @@ kubectl get nodes
 
 ---
 
+## Usage Example
+
+The following shows the core `main.tf` AKS Automatic resource as deployed by this module. This is the actual azapi resource body — not a simplified example.
+
+```hcl
+resource "azapi_resource" "aks" {
+  type      = "Microsoft.ContainerService/managedClusters@2025-05-01"
+  name      = var.cluster_name
+  location  = azapi_resource.rg.location
+  parent_id = azapi_resource.rg.id
+  tags      = local.tags
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  body = {
+    sku = {
+      name = "Automatic"
+      tier = "Standard"
+    }
+
+    properties = {
+      kubernetesVersion = var.kubernetes_version
+
+      nodeProvisioningProfile = {
+        mode = "Auto"    # Karpenter-based, mandatory for Automatic
+      }
+
+      agentPoolProfiles = [
+        {
+          name         = "systempool"
+          mode         = "System"
+          osType       = "Linux"
+          osSKU        = "AzureLinux"
+          vnetSubnetID = local.node_subnet_id  # null when using managed VNet
+        }
+      ]
+
+      networkProfile = {
+        networkPlugin     = "azure"
+        networkPluginMode = "overlay"
+        networkDataplane  = "cilium"
+        networkPolicy     = "cilium"
+        loadBalancerSku   = "standard"
+        outboundType      = local.outbound_type
+        podCidr           = var.pod_cidr
+        serviceCidr       = var.service_cidr
+        dnsServiceIP      = var.dns_service_ip
+      }
+
+      apiServerAccessProfile = {
+        enableVnetIntegration          = true
+        subnetId                       = local.apiserver_subnet_id
+        enablePrivateCluster           = var.enable_private_cluster
+        enablePrivateClusterPublicFQDN = var.enable_private_cluster ? false : null
+        privateDNSZone                 = var.enable_private_cluster ? (
+          var.private_dns_zone_id != null ? var.private_dns_zone_id : "system"
+        ) : null
+        authorizedIPRanges = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
+      }
+
+      ingressProfile = {
+        webAppRouting = {
+          enabled            = true
+          dnsZoneResourceIds = local.dns_zone_ids
+        }
+      }
+
+      securityProfile = {
+        workloadIdentity = { enabled = true }
+        imageCleaner     = { enabled = true, intervalHours = var.image_cleaner_interval_hours }
+      }
+
+      oidcIssuerProfile    = { enabled = true }
+      aadProfile           = { enableAzureRBAC = true, managed = true }
+      enableRBAC           = true
+      disableLocalAccounts = true
+
+      autoUpgradeProfile = {
+        upgradeChannel       = var.upgrade_channel
+        nodeOSUpgradeChannel = var.node_os_upgrade_channel
+      }
+
+      azureMonitorProfile       = { metrics = { enabled = var.enable_prometheus } }
+      workloadAutoScalerProfile = { keda = { enabled = true }, verticalPodAutoscaler = { enabled = true } }
+      storageProfile            = {
+        diskCSIDriver      = { enabled = true }
+        fileCSIDriver      = { enabled = true }
+        blobCSIDriver      = { enabled = false }
+        snapshotController = { enabled = true }
+      }
+
+      nodeResourceGroupProfile = { restrictionLevel = "ReadOnly" }
+    }
+  }
+}
+```
+
+See `main.tf` for the full implementation including Istio service mesh and response export values.
+
+---
+
+## Networking: Azure CNI Powered by Cilium vs Cilium Enterprise
+
+AKS Automatic uses **Azure CNI Overlay powered by Cilium** (open-source). This is the preconfigured and immutable networking stack. For environments that require additional capabilities, **Isovalent Cilium Enterprise** is available through the Azure Marketplace as a separately licensed product.
+
+| Capability | Azure CNI + Cilium (AKS Automatic) | Isovalent Cilium Enterprise |
+|---|---|---|
+| eBPF data plane | ✅ | ✅ |
+| Network policy (L3/L4) | ✅ | ✅ |
+| Network policy (L7, application-aware) | Via ACNS (paid add-on) | ✅ built-in |
+| FQDN-based egress control | Via ACNS | ✅ with compliance controls |
+| Hubble observability | ✅ basic | ✅ Enterprise + Timescape (historical) |
+| WireGuard transparent encryption | ✅ (Preview via ACNS) | ✅ with compliance options |
+| eBPF Host Routing | ✅ (Preview via ACNS) | ✅ |
+| Audit trails and forensics | Limited | ✅ |
+| Multi-cluster mesh | Not available | ✅ |
+| Commercial SLA | Azure support | Azure + Isovalent support |
+| Windows node support | ❌ | ❌ (roadmap) |
+| Upgrade from OSS | N/A | One-click via Marketplace |
+
+**When to consider Cilium Enterprise:**
+- Regulated industries requiring L7 policy enforcement, audit trails, and advanced forensics
+- Multi-cluster service mesh requirements
+- Need for historical traffic flow analysis (Timescape)
+- Commercial support SLA from Isovalent in addition to Azure support
+
+**For most AKS Automatic deployments**, the built-in Azure CNI + Cilium stack combined with ACNS (Advanced Container Networking Services) provides sufficient networking capabilities. ACNS is a paid add-on that extends the open-source Cilium with container network observability, FQDN filtering, and WireGuard encryption.
+
+---
+
+## Day-2 Operations
+
+### Karpenter NodePool and AKSNodeClass Configuration
+
+After cluster deployment, customise node provisioning behaviour by creating Karpenter CRDs. These are not managed by Terraform — they are Kubernetes-native resources applied via `kubectl`.
+
+```yaml
+# Example: GPU-optimised NodePool for AI/ML workloads
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: gpu-workloads
+spec:
+  template:
+    spec:
+      requirements:
+        - key: "karpenter.azure.com/sku-family"
+          operator: In
+          values: ["N"]          # N-series GPU VMs
+        - key: "karpenter.sh/capacity-type"
+          operator: In
+          values: ["on-demand"]  # or "spot" for cost savings
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: gpu-class
+  limits:
+    cpu: "64"
+    memory: "256Gi"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 30s
+---
+apiVersion: karpenter.azure.com/v1beta1
+kind: AKSNodeClass
+metadata:
+  name: gpu-class
+spec:
+  osDiskSizeGB: 128
+```
+
+Key Karpenter selectors for AKS:
+
+| Selector | Description | Example values |
+|---|---|---|
+| `karpenter.azure.com/sku-family` | VM SKU family | D, F, L, N (GPU), E (memory) |
+| `karpenter.azure.com/sku-name` | Specific SKU | Standard_NC24ads_A100_v4 |
+| `karpenter.sh/capacity-type` | Spot or on-demand | spot, on-demand |
+| `karpenter.azure.com/sku-gpu-name` | GPU model | A100, T4, V100 |
+| `karpenter.azure.com/sku-gpu-count` | GPU count per VM | 1, 2, 4, 8 |
+| `karpenter.azure.com/sku-cpu` | vCPU count | 4, 8, 16, 64 |
+| `karpenter.azure.com/sku-memory` | Memory in MiB | 16384, 65536 |
+| `karpenter.azure.com/sku-networking-accelerated` | Accelerated networking | true, false |
+
+### CI/CD Access to Private Clusters
+
+When `enable_private_cluster = true`, the API server is not reachable from the public internet. CI/CD pipelines need private network access:
+
+- **Self-hosted agents** (Azure DevOps / GitHub Actions) deployed in the spoke VNet or a peered VNet
+- **Azure Bastion** for interactive kubectl sessions from the hub
+- **`az aks command invoke`** for one-off commands without direct network access (requires Azure CLI auth, not kubectl)
+- Microsoft-hosted agents do **not** work with private clusters
+
+### Backup and Disaster Recovery
+
+AKS Automatic does not provide built-in backup. Consider:
+
+- **Azure Backup for AKS** (managed offering) for scheduled backup of cluster resources and persistent volumes
+- **Velero** (open-source) with Azure Blob Storage as the backup target, using Workload Identity for auth
+- **GitOps** (Flux/ArgoCD) for declarative cluster state recovery — workload manifests are redeployable from Git
+- Persistent volume snapshots via the Disk CSI Snapshot Controller (enabled by default)
+- For multi-region DR: deploy a second AKS Automatic cluster in a paired region. Use Azure Front Door or Traffic Manager for failover. Container images should be replicated via ACR geo-replication.
+
+### Cost Considerations
+
+- AKS Automatic always runs at **Standard tier** (uptime SLA charges apply)
+- Clusters **cannot be stopped/deallocated** — compute charges are continuous
+- Karpenter optimises cost via bin packing and consolidation, but idle clusters still incur node charges
+- Use **Spot VMs** via Karpenter NodePool (`karpenter.sh/capacity-type: spot`) for fault-tolerant workloads to reduce cost
+- The `metricsProfile.costAnalysis` property can be enabled for detailed per-resource cost breakdown in Azure Cost Management
+
+---
+
 ## Regional Availability and Limitations
 
 ### Region Requirements
