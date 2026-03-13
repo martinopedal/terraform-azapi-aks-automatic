@@ -41,12 +41,46 @@ variable "tags" {
 
 variable "enable_byo_vnet" {
   description = <<-EOT
-    When true, a VNet, subnets, NSG, and egress resources are created and the
-    AKS cluster is deployed into the custom network. When false, AKS creates
-    and manages its own VNet with a managed NAT Gateway.
+    When true (default), the AKS cluster is deployed into a custom VNet (BYO VNet).
+    This is always true for ALZ Corp. The distinction is who creates the networking:
+      - true + external subnet IDs set     : ALZ Corp vending mode. The platform pipeline
+        pre-provisions the spoke VNet, subnets, NSG, UDR, and peering via AVNM IPAM.
+        This module consumes the subnet IDs without creating networking resources.
+      - true + no external subnet IDs set  : Standalone mode. This module creates the spoke
+        VNet, subnets, NSG, and route table in network.tf.
+      - false                              : AKS-managed VNet. AKS creates its own network.
+        Not suitable for ALZ Corp.
   EOT
   type        = bool
   default     = true
+}
+
+# =============================================================================
+# External Subnet IDs (subscription vending / AVNM IPAM mode)
+#
+# When the platform team pre-provisions spoke VNets via the ALZ subscription
+# vending module with AVNM IPAM, set these variables to the resource IDs of
+# the pre-created subnets. The module will skip all network.tf resources and
+# use these IDs directly. Subnet delegations, NSG, and UDR must be configured
+# in the vending pipeline.
+# =============================================================================
+
+variable "external_node_subnet_id" {
+  description = "Resource ID of a pre-provisioned node subnet. When set, network.tf resources are skipped."
+  type        = string
+  default     = null
+}
+
+variable "external_apiserver_subnet_id" {
+  description = "Resource ID of a pre-provisioned API server subnet (must be delegated to Microsoft.ContainerService/managedClusters)."
+  type        = string
+  default     = null
+}
+
+variable "external_pe_subnet_id" {
+  description = "Resource ID of a pre-provisioned private endpoint subnet. When set, PE subnet creation is skipped but PEs for ACR/KV are still created in this subnet."
+  type        = string
+  default     = null
 }
 
 variable "vnet_name" {
@@ -85,35 +119,92 @@ variable "apiserver_subnet_address_prefix" {
   default     = "10.10.4.0/28"
 }
 
+variable "pe_subnet_name" {
+  description = "Name of the private endpoint subnet."
+  type        = string
+  default     = "snet-private-endpoints"
+}
+
+variable "pe_subnet_address_prefix" {
+  description = "Address prefix for the private endpoint subnet."
+  type        = string
+  default     = "10.10.12.0/24"
+}
+
+# =============================================================================
+# Supporting Services (ACR, Key Vault)
+#
+# In ALZ Corp, these services are accessed exclusively via Private Endpoints.
+# Public access is disabled. The Private DNS Zones (privatelink.azurecr.io,
+# privatelink.vaultcore.azure.net) must be pre-created in the connectivity
+# subscription by the platform team.
+# =============================================================================
+
+variable "create_acr" {
+  description = "When true, creates a Premium ACR with private endpoint, DNS zone group, and AcrPull role assignment."
+  type        = bool
+  default     = true
+}
+
+variable "acr_name" {
+  description = "Name of the Azure Container Registry. Must be globally unique, 5-50 alphanumeric characters."
+  type        = string
+}
+
+variable "acr_private_dns_zone_id" {
+  description = <<-EOT
+    Resource ID of the privatelink.azurecr.io Private DNS Zone in the connectivity subscription.
+    Required for Private Endpoint DNS registration. Set to null to skip DNS zone group creation
+    (PE will still be created but DNS records must be managed manually).
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "create_keyvault" {
+  description = "When true, creates a Key Vault with RBAC auth, private endpoint, DNS zone group, and Certificate User role assignment for App Routing TLS."
+  type        = bool
+  default     = true
+}
+
+variable "keyvault_name" {
+  description = "Name of the Azure Key Vault. Must be globally unique, 3-24 alphanumeric characters and hyphens."
+  type        = string
+}
+
+variable "kv_private_dns_zone_id" {
+  description = <<-EOT
+    Resource ID of the privatelink.vaultcore.azure.net Private DNS Zone in the connectivity subscription.
+    Required for Private Endpoint DNS registration. Set to null to skip DNS zone group creation.
+  EOT
+  type        = string
+  default     = null
+}
+
 # =============================================================================
 # Egress
 # =============================================================================
 
 variable "egress_type" {
   description = <<-EOT
-    Outbound (egress) type for BYO VNet deployments:
-      - "userAssignedNATGateway" : Recommended. Creates a NAT Gateway + Public IP.
-      - "loadBalancer"           : Uses the AKS Standard Load Balancer for SNAT.
-      - "userDefinedRouting"     : Routes 0.0.0.0/0 to an NVA/Firewall via UDR.
-    Ignored when enable_byo_vnet = false (managed VNet always uses managedNATGateway).
+    Outbound (egress) type for BYO VNet or external subnet deployments:
+      - "userDefinedRouting"     : Default for Corp. Routes 0.0.0.0/0 to the hub Azure Firewall via UDR.
+      - "loadBalancer"           : Uses the AKS Standard Load Balancer for SNAT. Dev/test only.
+    Ignored when using managed VNet (always managedNATGateway).
+    NAT Gateway is not offered as an option because ALZ Corp requires centralised
+    egress control through the hub firewall.
   EOT
   type        = string
-  default     = "userAssignedNATGateway"
+  default     = "userDefinedRouting"
 
   validation {
-    condition     = contains(["userAssignedNATGateway", "loadBalancer", "userDefinedRouting"], var.egress_type)
-    error_message = "egress_type must be one of: userAssignedNATGateway, loadBalancer, userDefinedRouting."
+    condition     = contains(["userDefinedRouting", "loadBalancer"], var.egress_type)
+    error_message = "egress_type must be one of: userDefinedRouting, loadBalancer."
   }
 }
 
-variable "nat_gateway_idle_timeout" {
-  description = "Idle timeout in minutes for the NAT Gateway (4–120)."
-  type        = number
-  default     = 4
-}
-
 variable "firewall_private_ip" {
-  description = "Private IP of the NVA/Firewall for UDR egress. Required when egress_type = userDefinedRouting."
+  description = "Private IP of the hub NVA/Azure Firewall for UDR egress. Required when egress_type = userDefinedRouting (the default)."
   type        = string
   default     = null
 }
