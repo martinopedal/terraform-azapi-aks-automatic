@@ -94,10 +94,10 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
 ### CIDR coordination with the ALZ IP plan
 
 - ALZ enforces a central IP address management (IPAM) plan. The VNet address space (`10.10.0.0/16`), pod CIDR (`10.244.0.0/16`), and service CIDR (`10.245.0.0/16`) **must not overlap** with:
-  - The hub VNet CIDR (typically `10.0.0.0/16` or similar)
-  - Other spoke VNets
-  - On-premises networks connected via ExpressRoute/VPN
-  - Other AKS clusters' overlay CIDRs if they share DNS or service mesh
+ - The hub VNet CIDR (typically `10.0.0.0/16` or similar)
+ - Other spoke VNets
+ - On-premises networks connected via ExpressRoute/VPN
+ - Other AKS clusters' overlay CIDRs if they share DNS or service mesh
 - Always coordinate CIDR ranges with the ALZ platform team before deployment. Update `variables.tf` defaults to match the allocated ranges.
 
 ### DNS - Private DNS zones
@@ -110,40 +110,40 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
 
 - The standard ALZ pattern routes all spoke egress through the hub Azure Firewall via UDR. Set `egress_type = "userDefinedRouting"` and `firewall_private_ip` to the hub firewall's private IP.
 - The ALZ firewall policy must include rules for AKS required outbound FQDNs. The `AzureKubernetesService` FQDN tag on Azure Firewall covers most requirements, but additional rules may be needed for:
-  - Container image registries (ACR, Docker Hub, etc.)
-  - Helm chart repositories
-  - External APIs consumed by workloads
-  - OS package repositories for Azure Linux (`packages.microsoft.com`, `acs-mirror.azureedge.net`, `mcr-0001.mcr-msedge.net`)
-- If the ALZ uses **NVA** instead of Azure Firewall, the `AzureKubernetesService` FQDN tag is not available — you must whitelist each FQDN individually.
+ - Container image registries (ACR, Docker Hub, etc.)
+ - Helm chart repositories
+ - External APIs consumed by workloads
+ - OS package repositories for Azure Linux (`packages.microsoft.com`, `acs-mirror.azureedge.net`, `mcr-0001.mcr-msedge.net`)
+- If the ALZ uses **NVA** instead of Azure Firewall, the `AzureKubernetesService` FQDN tag is not available - you must whitelist each FQDN individually.
 
 ### Policy conflicts
 
 - ALZ assigns Azure Policies at the management group level. AKS Automatic **preconfigures Deployment Safeguards** which internally uses Azure Policy. If the ALZ assigns conflicting policies (e.g., requiring a different network plugin, denying public IPs, or mandating specific tags), the cluster creation may fail.
 - Common conflicts:
-  - `Kubernetes clusters should not allow container privilege escalation` — may conflict with system components.
-  - `Kubernetes cluster should not allow privileged containers` — AKS system pods may need privileges.
-  - `Network policies should be enforced on AKS clusters` — already enforced by Cilium, but the policy may not recognise this.
-  - Policies enforcing specific NSG rules on subnets — AKS injects its own NSG rules which may violate strict NSG policies.
+ - `Kubernetes clusters should not allow container privilege escalation` - may conflict with system components.
+ - `Kubernetes cluster should not allow privileged containers` - AKS system pods may need privileges.
+ - `Network policies should be enforced on AKS clusters` - already enforced by Cilium, but the policy may not recognise this.
+ - Policies enforcing specific NSG rules on subnets - AKS injects its own NSG rules which may violate strict NSG policies.
 - Audit the ALZ policy assignments **before** deploying. Use `az policy assignment list --scope /subscriptions/<id>` or the ALZ management group scope.
 
 ### azapi vs AVM module compatibility
 
-- This module uses `azapi_resource` for all Azure resources. [AVM modules](https://registry.terraform.io/namespaces/Azure) use `azurerm_*` resources. Do **not** mix `azapi_resource` and `azurerm_*` for the **same resource** (e.g., don't create the AKS cluster with azapi and then try to manage it with `azurerm_kubernetes_cluster` in another config) — this causes state conflicts and drift.
+- This module uses `azapi_resource` for all Azure resources. [AVM modules](https://registry.terraform.io/namespaces/Azure) use `azurerm_*` resources. Do **not** mix `azapi_resource` and `azurerm_*` for the **same resource** (e.g., don't create the AKS cluster with azapi and then try to manage it with `azurerm_kubernetes_cluster` in another config) - this causes state conflicts and drift.
 - If integrating with AVM-managed resources (e.g., an AVM-provisioned VNet or Key Vault), reference them via **data sources** or **resource IDs passed as variables**, never by importing them into this state.
 - When the ALZ platform team uses the [AVM Platform Landing Zone module](https://registry.terraform.io/modules/Azure/avm-ptn-alz/azurerm/latest), coordinate output values: the hub firewall IP, VNet peering resource IDs, Private DNS zone IDs, and Log Analytics workspace ID are typically exposed as outputs from that module.
 
 ### Monitoring integration
 
-- ALZ typically deploys a central **Log Analytics workspace** in the management subscription. To send AKS Container Insights and Prometheus data to the central workspace, you must add the workspace resource ID to the cluster's `azureMonitorProfile` or `addonProfiles` — this is not yet wired in this module. Extend `main.tf` if centralised logging is required.
+- ALZ typically deploys a central **Log Analytics workspace** in the management subscription. To send AKS Container Insights and Prometheus data to the central workspace, you must add the workspace resource ID to the cluster's `azureMonitorProfile` or `addonProfiles` - this is not yet wired in this module. Extend `main.tf` if centralised logging is required.
 
 ### RBAC and identity
 
 - AKS Automatic enforces Azure RBAC for Kubernetes (`aadProfile.enableAzureRBAC = true`, local accounts disabled). In ALZ, Kubernetes RBAC role assignments should be managed through the ALZ **identity subscription** or via PIM-eligible role assignments.
 - The AKS cluster's SystemAssigned managed identity needs:
-  - `Network Contributor` on the BYO VNet/subnets (for node provisioning).
-  - `Private DNS Zone Contributor` on any private DNS zones referenced in Application Routing.
-  - `DNS Zone Contributor` on any public DNS zones referenced in Application Routing.
-  - `Key Vault Certificate User` on any Key Vault used for TLS certs.
+ - `Network Contributor` on the BYO VNet/subnets (for node provisioning).
+ - `Private DNS Zone Contributor` on any private DNS zones referenced in Application Routing.
+ - `DNS Zone Contributor` on any public DNS zones referenced in Application Routing.
+ - `Key Vault Certificate User` on any Key Vault used for TLS certs.
 - These cross-subscription RBAC assignments are **not created by this module** and must be managed separately.
 
 ---
@@ -156,7 +156,7 @@ All Azure resources use `azapi_resource`. Do **not** introduce `azurerm_*` resou
 
 1. Find the ARM resource type and latest stable API version.
 2. Use `azapi_resource` with HCL `body = { ... }` syntax (not `jsonencode`).
-3. Use `null` for optional properties that should be omitted — azapi strips nulls automatically.
+3. Use `null` for optional properties that should be omitted - azapi strips nulls automatically.
 
 ### File layout
 
@@ -196,17 +196,17 @@ The `body` block in `azapi_resource.aks` mirrors the ARM REST API structure exac
 
 ### Tags
 
-All resources receive `local.tags`. Don't hardcode tags on individual resources — pass them through the local.
+All resources receive `local.tags`. Don't hardcode tags on individual resources - pass them through the local.
 
 ## Validation Checklist
 
 Before committing changes, run the following:
 
-1. `terraform init && terraform validate` — all code changes must pass
-2. `terraform fmt -check -recursive` — formatting must be consistent
+1. `terraform init && terraform validate` - all code changes must pass
+2. `terraform fmt -check -recursive` - formatting must be consistent
 3. Verify Mermaid diagram in README.md renders correctly on GitHub (no stale AGC flows, correct DNS zone format, Corp ingress via App Routing internal LB)
 4. Verify DrawIO source (`docs/alz-corp-aks-automatic.drawio`) and SVG (`docs/alz-corp-aks-automatic.drawio.svg`) are consistent with README content
-5. Validate all claims against current Microsoft Learn documentation using the azure-mcp-documentation tool — do not rely on cached knowledge for AKS Automatic features, limitations, or regional availability
+5. Validate all claims against current Microsoft Learn documentation using the azure-mcp-documentation tool - do not rely on cached knowledge for AKS Automatic features, limitations, or regional availability
 6. Check that RBAC role assignments use the correct identity (kubelet for AcrPull, App Routing add-on for Key Vault Certificate User, cluster identity for Network Contributor)
 7. Confirm Private DNS Zone format is `private.<region>.azmk8s.io` for VNet-integrated clusters (not `privatelink.`)
 8. Ensure no NAT Gateway resources or variables remain in the Terraform code (Corp = hub firewall egress only)
