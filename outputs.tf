@@ -18,7 +18,7 @@ output "cluster_fqdn" {
 }
 
 output "cluster_private_fqdn" {
-  description = "Private FQDN of the AKS cluster API server (private cluster only)."
+  description = "Private FQDN of the API server (VNet-integrated private cluster only). Format: <cluster>.private.<region>.azmk8s.io"
   value       = try(azapi_resource.aks.output.properties.privateFQDN, null)
 }
 

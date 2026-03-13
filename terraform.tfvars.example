@@ -68,3 +68,9 @@ tags = {
 
 # enable_private_cluster = true
 # authorized_ip_ranges   = []       # IP ranges are ignored for private clusters
+#
+# For ALZ hub-spoke, point to a pre-created zone in the connectivity subscription:
+# private_dns_zone_id = "/subscriptions/<conn-sub>/resourceGroups/<rg>/providers/Microsoft.Network/privateDnsZones/private.<region>.azmk8s.io"
+#
+# Use "system" (default) to let AKS create the zone in the node resource group.
+# Use "none" to skip private DNS zone creation entirely.
