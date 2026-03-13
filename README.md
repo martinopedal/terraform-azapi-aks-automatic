@@ -218,11 +218,16 @@ AKS Automatic supports three ingress options, but they do not all use the same A
 
 #### Application Gateway for Containers (Gateway API, L7)
 
-> **Limitation (as of March 2026):** AGC frontends do **not** support private IP addresses. Frontends only expose a public FQDN. Based on public signals from the AGC product team, private ingress support is actively in development and is expected in the near future. No official timeline or GA date has been committed — plan accordingly and do not take dependencies on unannounced features. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
+> **Limitation (as of March 2026):** Two blockers currently prevent AGC use on AKS Automatic in Corp scenarios:
+>
+> 1. **The AGC AKS add-on is not yet supported on AKS Automatic clusters.** The add-on is available on AKS Standard only. Based on product group signals, support for AKS Automatic is expected in the near future. See [AGC ALB Controller Add-on](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon).
+> 2. **AGC frontends do not support private IP addresses.** Frontends only expose a public FQDN. Based on public signals from the AGC product team, private ingress support is actively in development and is expected in the near future. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
+>
+> No official timelines or GA dates have been committed for either feature — plan accordingly and do not take dependencies on unannounced features.
 >
 > For ALZ Corp scenarios requiring fully private ingress today, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode**.
 
-AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. Once private IP frontend support ships, AGC will be the recommended Corp ingress option due to its WAF, mTLS, and traffic splitting capabilities.
+AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. Once the AKS Automatic add-on and private IP frontend support ship, AGC will be the recommended Corp ingress option due to its WAF, mTLS, and traffic splitting capabilities.
 
 ```
 Client -> AGC Public Frontend -> ALB Controller -> Pods
@@ -230,7 +235,7 @@ Client -> AGC Public Frontend -> ALB Controller -> Pods
 
 | Aspect | Detail |
 |---|---|
-| AKS integration | AKS managed add-on (required for AKS Automatic) |
+| AKS integration | AKS managed add-on (**not yet available on AKS Automatic**, supported on AKS Standard) |
 | Subnet | Dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`, minimum /24 |
 | Frontend | **Public FQDN only** (private IP not yet supported) |
 | API model | `GatewayClass`, `Gateway`, `HTTPRoute` CRDs |
@@ -281,11 +286,11 @@ Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub
 
 | | AGC | App Routing (NGINX) | Istio Gateway |
 |---|---|---|---|
-| Preconfigured | No (add-on) | Yes | No (opt-in) |
+| AKS Automatic support | ❌ add-on not yet available | ✅ preconfigured | ✅ opt-in |
 | Gateway API | ✅ | Ingress API (Gateway API planned) | Istio Gateway CRD (K8s Gateway API planned) |
 | L7 features | WAF, mTLS, rewrites, traffic splits | Host/path routing, TLS | Traffic mgmt, mTLS, fault injection |
 | Private IP frontend | ❌ not yet supported | ✅ internal LB | ✅ internal mode |
-| ALZ Corp recommended | ❌ until private IP ships | **✅ Primary for Corp** | ✅ Service mesh scenarios |
+| ALZ Corp recommended | ❌ until add-on + private IP ship | **✅ Primary for Corp** | ✅ Service mesh scenarios |
 | Managed by | Azure (AGC resource) | AKS (in-cluster) | AKS (in-cluster) |
 
 ### Egress
