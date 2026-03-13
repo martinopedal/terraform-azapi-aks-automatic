@@ -264,10 +264,15 @@ variable "enable_private_cluster" {
 variable "private_dns_zone_id" {
   description = <<-EOT
     Resource ID of a pre-created private DNS zone for the private API server FQDN.
-    Only used when enable_private_cluster = true. Custom zones require a UserAssigned managed identity on the AKS cluster.
+    Only used when enable_private_cluster = true.
       - null (default) : AKS creates a private.<region>.azmk8s.io zone in the node resource group (privateDNSZone = "system").
-      - "<resource-id>": Use a pre-created zone, e.g. in the ALZ connectivity subscription. Format: private.<region>.azmk8s.io.
-      - "none"         : No private DNS zone. API server reachable only if public access is also enabled.
+      - "<resource-id>": Use a pre-created zone, e.g. in the ALZ connectivity subscription.
+        Format: private.<region>.azmk8s.io.
+        NOTE: Custom zones require a UserAssigned managed identity. This module uses
+        SystemAssigned, so custom zone IDs will cause Azure to reject the deployment.
+        Extend main.tf identity block to UserAssigned before using this option.
+      - "none"         : No private DNS zone. The module automatically enables the
+        public FQDN in this case so the API server remains reachable.
   EOT
   type        = string
   default     = null

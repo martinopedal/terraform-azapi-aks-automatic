@@ -85,11 +85,12 @@ resource "azapi_resource" "aks" {
       # in the delegated subnet, not a Private Link endpoint.
       # Private cluster mode disables public DNS and requires a
       # private.<region>.azmk8s.io DNS zone for out-of-cluster resolution.
+      # When private_dns_zone_id = "none", the public FQDN must remain enabled.
       apiServerAccessProfile = {
         enableVnetIntegration          = true
-        subnetId                       = local.apiserver_subnet_id # null -> managed VNet
+        subnetId                       = local.apiserver_subnet_id
         enablePrivateCluster           = var.enable_private_cluster
-        enablePrivateClusterPublicFQDN = var.enable_private_cluster ? false : null
+        enablePrivateClusterPublicFQDN = var.enable_private_cluster && var.private_dns_zone_id == "none" ? true : (var.enable_private_cluster ? false : null)
         privateDNSZone                 = var.enable_private_cluster ? (var.private_dns_zone_id != null ? var.private_dns_zone_id : "system") : null
         authorizedIPRanges             = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
       }
@@ -197,5 +198,7 @@ resource "azapi_resource" "aks" {
     "properties.currentKubernetesVersion",
     "properties.nodeResourceGroup",
     "properties.oidcIssuerProfile.issuerURL",
+    "properties.identityProfile.kubeletidentity.objectId",
+    "properties.ingressProfile.webAppRouting.identity.objectId",
   ]
 }

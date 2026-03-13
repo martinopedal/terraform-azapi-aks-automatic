@@ -51,12 +51,19 @@ resource "azapi_resource" "acr" {
 
   body = {
     sku = {
-      name = "Premium" # Required for Private Endpoint and geo-replication
+      name = "Premium"
     }
     properties = {
-      adminUserEnabled         = false      # Security: no admin credentials
-      publicNetworkAccess      = "Disabled" # Corp: private access only
+      adminUserEnabled         = false
+      publicNetworkAccess      = "Disabled"
       networkRuleBypassOptions = "AzureServices"
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.pe_subnet_id != null
+      error_message = "ACR is configured with public access disabled but no PE subnet is available. Set external_pe_subnet_id (vending mode) or enable BYO VNet (standalone mode) to provide a subnet for the private endpoint."
     }
   }
 }
@@ -130,14 +137,21 @@ resource "azapi_resource" "keyvault" {
     properties = {
       tenantId                  = data.azurerm_client_config.current.tenant_id
       sku                       = { family = "A", name = "standard" }
-      enableRbacAuthorization   = true # Azure RBAC, not access policies
+      enableRbacAuthorization   = true
       enableSoftDelete          = true
       softDeleteRetentionInDays = 90
-      publicNetworkAccess       = "Disabled" # Corp: private access only
+      publicNetworkAccess       = "Disabled"
       networkAcls = {
         defaultAction = "Deny"
         bypass        = "AzureServices"
       }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.pe_subnet_id != null
+      error_message = "Key Vault is configured with public access disabled but no PE subnet is available. Set external_pe_subnet_id (vending mode) or enable BYO VNet (standalone mode) to provide a subnet for the private endpoint."
     }
   }
 }
@@ -200,7 +214,8 @@ resource "azapi_resource" "kv_pe_dns" {
 # may be cross-subscription assignments managed by the platform team.
 # =============================================================================
 
-# AcrPull — kubelet pulls container images from private ACR
+# AcrPull — the KUBELET identity pulls container images, not the cluster identity.
+# The kubelet identity objectId is exported from the AKS response.
 resource "azapi_resource" "role_acr_pull" {
   count     = var.create_acr ? 1 : 0
   type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
@@ -210,13 +225,15 @@ resource "azapi_resource" "role_acr_pull" {
   body = {
     properties = {
       roleDefinitionId = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d"
-      principalId      = azapi_resource.aks.identity[0].principal_id
+      principalId      = azapi_resource.aks.output.properties.identityProfile.kubeletidentity.objectId
       principalType    = "ServicePrincipal"
     }
   }
 }
 
-# Key Vault Certificate User — App Routing fetches TLS certificates
+# Key Vault Certificate User — the APP ROUTING add-on identity fetches TLS
+# certificates, not the cluster control-plane identity. The add-on identity
+# objectId is exported from the AKS response.
 resource "azapi_resource" "role_kv_cert_user" {
   count     = var.create_keyvault ? 1 : 0
   type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
@@ -226,7 +243,7 @@ resource "azapi_resource" "role_kv_cert_user" {
   body = {
     properties = {
       roleDefinitionId = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/db79e9a7-68ee-4b58-9aeb-b90e7c24fcba"
-      principalId      = azapi_resource.aks.identity[0].principal_id
+      principalId      = azapi_resource.aks.output.properties.ingressProfile.webAppRouting.identity.objectId
       principalType    = "ServicePrincipal"
     }
   }
