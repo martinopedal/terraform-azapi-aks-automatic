@@ -806,7 +806,43 @@ AKS Automatic clusters require all of the following in the target region:
 - Azure Linux OS support
 - API Server VNet Integration at GA
 
-API Server VNet Integration is GA in all public cloud regions except `qatarcentral`. Both **Norway East** and **Sweden Central** meet all requirements (3 AZs, VNet integration GA) and are supported for AKS Automatic deployment.
+API Server VNet Integration is GA in all public cloud regions except `qatarcentral`. Both **Norway East** and **Sweden Central** meet the core AKS Automatic requirements.
+
+### Feature and Dependency Availability Matrix (Norway East / Sweden Central)
+
+The table below covers AKS Automatic and all its dependencies referenced in this module. Status is based on official Microsoft documentation as of March 2026. Verify current availability at the [Azure Products by Region](https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/) page before deployment.
+
+| Feature / Dependency | Norway East | Sweden Central | Status | Notes |
+|---|---|---|---|---|
+| **AKS (general)** | ✅ | ✅ | GA | |
+| **AKS Automatic (SKU)** | ✅ | ✅ | GA | Requires 3 AZs + VNet integration |
+| **API Server VNet Integration** | ✅ | ✅ | GA | GA in all public regions except qatarcentral |
+| **Availability Zones (3+)** | ✅ | ✅ | GA | Both regions have 3 AZs |
+| **Azure CNI Overlay + Cilium** | ✅ | ✅ | GA | Preconfigured in Automatic |
+| **Node Autoprovisioning (NAP/Karpenter)** | ✅ | ✅ | GA | Preconfigured in Automatic |
+| **Application Routing add-on (NGINX)** | ✅ | ✅ | GA | Preconfigured in Automatic |
+| **Application Gateway for Containers** | ✅ | ❌ | GA (limited regions) | [AGC region list](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions) includes Norway East but not Sweden Central |
+| **AGC AKS add-on on Automatic** | ❌ | ❌ | Not yet supported | Add-on not available on AKS Automatic clusters |
+| **AGC private IP frontend** | ❌ | ❌ | Not yet supported | Public FQDN only. Private IP in development |
+| **Istio service mesh add-on** | ✅ | ✅ | GA | Available in all AKS regions |
+| **Managed Prometheus (Azure Monitor workspace)** | ✅ | ✅ | GA | [Workspace regions](https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-metrics-overview) include both |
+| **Container Insights** | ✅ | ✅ | GA | |
+| **Azure Monitor Dashboards (built-in Grafana)** | ✅ | ✅ | GA | Portal-embedded, no separate resource |
+| **Managed Grafana** | Verify | Verify | GA (expanding) | Check [Products by Region](https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/). Can be deployed in a different region from the cluster if needed. |
+| **ACNS (Container Network Observability)** | ✅ | ✅ | GA | Works with Cilium dataplane |
+| **ACNS (WireGuard encryption)** | ✅ | ✅ | Preview | |
+| **ACNS (eBPF Host Routing)** | ✅ | ✅ | Preview | |
+| **Azure Firewall** | ✅ | ✅ | GA | Required for UDR egress pattern |
+| **NAT Gateway** | ✅ | ✅ | GA | |
+| **Azure Key Vault** | ✅ | ✅ | GA | TLS certs for App Routing |
+| **Azure Container Registry** | ✅ | ✅ | GA | |
+| **Azure Private DNS Zones** | ✅ | ✅ | GA | |
+| **AVNM IPAM** | ✅ | ✅ | GA | [AVNM region list](https://learn.microsoft.com/azure/virtual-network-manager/overview) |
+| **Workload Identity (Entra Workload ID)** | ✅ | ✅ | GA | Preconfigured in Automatic |
+| **Defender for Containers** | ✅ | ✅ | GA | Optional |
+| **Azure Policy (Deployment Safeguards)** | ✅ | ✅ | GA | Preconfigured in Automatic |
+
+**Key takeaway for Sweden Central:** Application Gateway for Containers is not available in Sweden Central. If AGC is required (once private IP ships and the Automatic add-on becomes available), deploy in Norway East or another supported region. All other AKS Automatic dependencies are available in both regions.
 
 ### Operational Limitations (NAP/Karpenter)
 
