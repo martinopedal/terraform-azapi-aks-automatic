@@ -134,9 +134,8 @@ flowchart TB
     OnPrem ===|"ExpressRoute"| ERGW
     HubVNet <-->|"VNet Peering"| SpokeVNet
 
-    CorpUser -->|"1 HTTPS private"| AGCFrontend
-    AGCFrontend --> AGC
-    AGC -->|"2 Gateway API"| IngressCtrl
+    CorpUser -->|"1 HTTPS private\n(internal LB)"| IngressCtrl
+    AGCFrontend -.->|"public only\n(no private IP yet)"| AGC
 
     Pods -.->|"3 UDR 0.0.0.0/0"| AzFW
     AzFW -->|"4 FQDN filtered"| Internet
@@ -155,7 +154,7 @@ flowchart TB
 
 | # | Flow | Path | Notes |
 |---|---|---|---|
-| 1-2 | **Ingress** | Corp User -> ExpressRoute -> Hub -> Peering -> AGC Private Frontend -> ALB Controller -> Pods | All private, no public IP |
+| 1-2 | **Ingress (Corp)** | Corp User -> ExpressRoute -> Hub -> Peering -> Internal LB -> App Routing (NGINX) -> Pods | Fully private via internal LB. AGC not viable for Corp until private IP frontend ships. |
 | 3-4 | **Egress** | Pods -> UDR -> Hub Azure Firewall -> Internet | FQDN-filtered via `AzureKubernetesService` tag |
 | 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> Private API Server | VNet-integrated ILB; private cluster FQDN: `<cluster>.private.<region>.azmk8s.io` |
 | 6 | **PaaS access** | Pods -> Private Endpoints (ACR, Key Vault, SQL, Storage) | Workload Identity authentication |
@@ -215,19 +214,23 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** with eBPF-based data 
 
 AKS Automatic supports three ingress options. All use the **Kubernetes Gateway API** (`GatewayClass`, `Gateway`, `HTTPRoute`). The legacy `Ingress` resource type is being superseded by Gateway API and should not be used for new deployments.
 
-#### Application Gateway for Containers (recommended for ALZ Corp)
+#### Application Gateway for Containers (Gateway API, L7)
 
-AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. It operates as a separate Azure resource outside the AKS data plane.
+> **Limitation (as of March 2026):** AGC frontends do **not** support private IP addresses. Frontends only expose a public FQDN. This means AGC is **not suitable for ALZ Corp / private-only ingress** where no public endpoints are permitted. There is no committed ETA from Microsoft for private IP frontend support. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
+>
+> For ALZ Corp scenarios requiring fully private ingress, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode** instead.
+
+AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. When private IP frontend support is added, it will become the recommended Corp ingress option.
 
 ```
-Corp User -> ExpressRoute -> Peering -> AGC Private Frontend -> ALB Controller -> Pods
+Client -> AGC Public Frontend -> ALB Controller -> Pods
 ```
 
 | Aspect | Detail |
 |---|---|
 | AKS integration | AKS managed add-on (required for AKS Automatic) |
 | Subnet | Dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`, minimum /24 |
-| Private ingress | Private FQDN on the frontend. CNAME in hub Private DNS Zone for corp resolution |
+| Frontend | **Public FQDN only** (private IP not yet supported) |
 | API model | `GatewayClass`, `Gateway`, `HTTPRoute` CRDs |
 | WAF | Optional WAF policy on AGC security policy resource |
 | TLS | SSL termination, ECDSA + RSA, end-to-end SSL, mTLS |
@@ -235,15 +238,9 @@ Corp User -> ExpressRoute -> Peering -> AGC Private Frontend -> ALB Controller -
 | Identity | `applicationloadbalancer-<cluster>` managed identity, auto-configured by add-on |
 | Deployment modes | ALB-managed (`ApplicationLoadBalancer` CRD) or BYO (Terraform/ARM provisioned) |
 
-Corp considerations:
+#### Application Routing Add-on (managed NGINX, preconfigured) - recommended for ALZ Corp
 
-- Private frontends require no public IP. Traffic enters via ExpressRoute/VPN through hub peering.
-- DNS resolution requires a CNAME in the hub-linked Private DNS Zone pointing to the `*.appgw.azure.com` FQDN.
-- The AGC association subnet must be in the same VNet and region as the AKS cluster.
-
-#### Application Routing Add-on (managed NGINX, preconfigured)
-
-Always enabled on AKS Automatic. Deploys a managed NGINX-based controller supporting Gateway API.
+Always enabled on AKS Automatic. Deploys a managed NGINX-based controller supporting Gateway API. Supports **internal Azure Load Balancer** for fully private ingress.
 
 ```
 Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing NGINX -> Pods
@@ -255,12 +252,13 @@ Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing NGINX -> Pods
 | DNS integration | `ingressProfile.webAppRouting.dnsZoneResourceIds` (public and private zones) |
 | TLS from Key Vault | Reference certs in `Gateway` listener config, automatic rotation |
 | Internal-only | `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation on Service |
+| Private frontend | ✅ Fully supported via internal Azure Load Balancer |
 
-Corp considerations: Configure as internal LB only. Point hub Private DNS Zone records to the internal LB IP.
+Corp considerations: Configure as internal LB only. Create DNS records in the hub Private DNS Zone pointing to the internal LB IP. This is the recommended ingress for ALZ Corp until AGC adds private IP frontend support.
 
 #### Istio Service Mesh Ingress Gateway (optional)
 
-Envoy-based ingress supporting Gateway API natively.
+Envoy-based ingress supporting Gateway API natively. Supports **internal mode** for fully private ingress.
 
 ```
 Corp User -> ExpressRoute -> Peering -> Internal Istio Gateway -> HTTPRoute -> Pods
@@ -273,6 +271,7 @@ Corp User -> ExpressRoute -> Peering -> Internal Istio Gateway -> HTTPRoute -> P
 | Internal mode | Set `mode: "Internal"` for corp-only access |
 | Gateway API | `Gateway` + `HTTPRoute` with Istio GatewayClass |
 | mTLS | `PeerAuthentication` CRDs |
+| Private frontend | ✅ Fully supported via internal Azure Load Balancer |
 
 Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub firewall must allow return traffic to the Istio LB frontend IP.
 
@@ -283,8 +282,8 @@ Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub
 | Preconfigured | No (add-on) | Yes | No (opt-in) |
 | Gateway API | ✅ | ✅ | ✅ |
 | L7 features | WAF, mTLS, rewrites, traffic splits | Host/path routing, TLS | Traffic mgmt, mTLS, fault injection |
-| Private frontend | ✅ private FQDN | ✅ internal LB | ✅ internal mode |
-| ALZ Corp recommended | ✅ Primary | ✅ Simple workloads | ✅ Service mesh |
+| Private IP frontend | ❌ not yet supported | ✅ internal LB | ✅ internal mode |
+| ALZ Corp recommended | ❌ until private IP ships | **✅ Primary for Corp** | ✅ Service mesh scenarios |
 | Managed by | Azure (AGC resource) | AKS (in-cluster) | AKS (in-cluster) |
 
 ### Egress
