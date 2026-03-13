@@ -1,45 +1,59 @@
-# AKS Automatic – Deep Dive & Terraform (azapi) Example
+# AKS Automatic – Terraform (azapi) with ALZ Corp Integration
 
 ## Table of Contents
 
-- [What is AKS Automatic?](#what-is-aks-automatic)
-- [How AKS Automatic Differs from AKS Standard](#how-aks-automatic-differs-from-aks-standard)
-- [Components & Architecture](#components--architecture)
-  - [SKU & Cluster Tier](#sku--cluster-tier)
+- [Overview](#overview)
+- [AKS Automatic vs AKS Standard](#aks-automatic-vs-aks-standard)
+- [Architecture](#architecture)
+  - [ALZ Corp Architecture Diagram](#alz-corp-architecture-diagram)
+  - [Traffic Flows](#traffic-flows)
+- [AKS Automatic Components](#aks-automatic-components)
+  - [SKU and Cluster Tier](#sku-and-cluster-tier)
   - [Node Provisioning (Karpenter)](#node-provisioning-karpenter)
   - [Networking](#networking)
   - [Ingress](#ingress)
   - [Egress](#egress)
-  - [BYO VNet](#byo-vnet)
   - [Security](#security)
-  - [Monitoring & Observability](#monitoring--observability)
-  - [Auto-Upgrade & Maintenance](#auto-upgrade--maintenance)
+  - [Monitoring and Observability](#monitoring-and-observability)
+  - [Auto-Upgrade and Maintenance](#auto-upgrade-and-maintenance)
   - [Scaling](#scaling)
   - [Storage](#storage)
   - [Policy Enforcement](#policy-enforcement)
-- [What Is Preconfigured vs. What You Can Fine-Tune](#what-is-preconfigured-vs-what-you-can-fine-tune)
+- [Preconfigured vs Fine-Tunable](#preconfigured-vs-fine-tunable)
+- [BYO VNet Topology](#byo-vnet-topology)
+- [Azure Landing Zone Caveats](#azure-landing-zone-caveats)
+  - [VNet and Subnet Ownership](#vnet-and-subnet-ownership)
+  - [CIDR Coordination](#cidr-coordination)
+  - [Private DNS Zone Management](#private-dns-zone-management)
+  - [Egress Through Hub Firewall](#egress-through-hub-firewall)
+  - [Azure Policy Conflicts](#azure-policy-conflicts)
+  - [azapi vs AVM Compatibility](#azapi-vs-avm-compatibility)
+  - [RBAC and Identity Requirements](#rbac-and-identity-requirements)
+  - [Monitoring Integration](#monitoring-integration)
 - [Terraform Project Structure](#terraform-project-structure)
 - [Deployment Scenarios](#deployment-scenarios)
-- [Regional Availability & Limitations](#regional-availability--limitations)
+- [Regional Availability and Limitations](#regional-availability-and-limitations)
 - [References](#references)
 
 ---
 
-## What is AKS Automatic?
+## Overview
 
-AKS Automatic is an opinionated, production-ready flavour of Azure Kubernetes Service. It takes care of cluster setup, node management, scaling, security, and networking – embedding **AKS Well-Architected best practices** by default. You get a fully managed Kubernetes experience while still retaining full access to the Kubernetes API and its ecosystem.
+This repository contains a Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resource creation. It is designed for deployment into an **Azure Landing Zone (ALZ) Corp** spoke subscription with private connectivity.
 
-| Aspect | Benefit |
-|---|---|
-| **Production ready by default** | Preconfigured for optimal production use; fully managed node pools that auto-scale based on workload demand. |
-| **Built-in best practices** | Hardened security defaults, automatic patching, deployment safeguards via Azure Policy. |
-| **Code to Kubernetes in minutes** | Go from a container image to a deployed, best-practice application quickly. |
+The module supports:
+
+- BYO VNet with four subnets (nodes, API server, AGC, private endpoints)
+- Three egress options: NAT Gateway, Standard Load Balancer, User-Defined Routing (hub firewall)
+- Three ingress options: Application Gateway for Containers, Application Routing add-on, Istio
+- Private cluster with VNet-integrated API server
+- Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
 
 ---
 
-## How AKS Automatic Differs from AKS Standard
+## AKS Automatic vs AKS Standard
 
-The fundamental ARM API difference is:
+The ARM API difference between AKS Automatic and AKS Standard:
 
 ```json
 {
@@ -55,425 +69,554 @@ The fundamental ARM API difference is:
 }
 ```
 
-In AKS Standard you would use `"sku": { "name": "Base", "tier": "Free|Standard|Premium" }` and `"nodeProvisioningProfile": { "mode": "Manual" }`.
+AKS Standard uses `"sku": { "name": "Base" }` and `"nodeProvisioningProfile": { "mode": "Manual" }`.
 
-Many features that are **optional** in Standard become **preconfigured** (always on, cannot be changed) or **default** (enabled for you but can be adjusted) in Automatic.
+In AKS Automatic, many features that are optional in Standard become **preconfigured** (immutable) or **default** (enabled but adjustable). See [Preconfigured vs Fine-Tunable](#preconfigured-vs-fine-tunable) for the full breakdown.
 
 ---
 
-## Components & Architecture
+## Architecture
 
-### SKU & Cluster Tier
+### ALZ Corp Architecture Diagram
+
+The following diagram shows AKS Automatic deployed in an ALZ Corp spoke subscription with private connectivity. An editable DrawIO source is available at [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio) ([open in diagrams.net](https://app.diagrams.net/#Uhttps%3A%2F%2Fraw.githubusercontent.com%2Fmartinopedal%2Fterraform-azapi-aks-automatic%2Fmain%2Fdocs%2Falz-corp-aks-automatic.drawio)).
+
+```mermaid
+flowchart TB
+    subgraph OnPrem["On-Premises Network"]
+        CorpUser["Corp User"]
+        DevOps["DevOps Engineer\nkubectl"]
+        OnPremDNS["DNS Server\nconditional forwarder"]
+    end
+
+    subgraph ConnSub["Connectivity Subscription"]
+        subgraph HubVNet["Hub VNet 10.0.0.0/16"]
+            ERGW["ExpressRoute / VPN\nGateway"]
+            AzFW["Azure Firewall Premium\nAzureKubernetesService FQDN tag\n10.0.1.4"]
+            Bastion["Azure Bastion"]
+        end
+        PrivDNS["Private DNS Zones\nprivatelink.region.azmk8s.io\nprivatelink.azurecr.io\nprivatelink.vaultcore.azure.net\napp.contoso.corp"]
+    end
+
+    subgraph MgmtSub["Management Subscription"]
+        LA["Log Analytics Workspace"]
+        Prom["Managed Prometheus"]
+        Grafana["Managed Grafana"]
+    end
+
+    subgraph AppLZ["Application Landing Zone Corp"]
+        subgraph SpokeVNet["Spoke VNet 10.10.0.0/16"]
+            subgraph NodeSnet["snet-aks-nodes 10.10.0.0/22\nNSG + UDR to 10.0.1.4"]
+                subgraph AKS["AKS Automatic\nsku:Automatic tier:Standard"]
+                    Preconfig["CNI Overlay + Cilium\nWorkload Identity + OIDC\nAzure RBAC + Image Cleaner\nDeployment Safeguards"]
+                    NAP["Karpenter NAP\nSystem + User NodePools\nKEDA + VPA + HPA"]
+                    IngressCtrl["ALB Controller - AGC\nApp Routing - NGINX\nIstio Gateway"]
+                    Pods["Workload Pods\n10.244.0.0/16"]
+                end
+            end
+            APISnet["snet-aks-apiserver 10.10.4.0/28\nDelegated to ContainerService\nPrivate API Server"]
+            subgraph AGCSnet["snet-agc 10.10.8.0/24\nDelegated to ServiceNetworking"]
+                AGC["App Gateway for Containers\nGateway API + WAF"]
+                AGCFrontend["Private Frontend"]
+            end
+            subgraph PESnet["snet-private-endpoints 10.10.12.0/24"]
+                ACR["ACR"]
+                KV["Key Vault"]
+                SA["Storage"]
+                DB["SQL / Cosmos"]
+            end
+        end
+        NodeRG["Node Resource Group - ReadOnly\nVMSS + LBs + Managed Disks"]
+    end
+
+    Internet(("Internet"))
+
+    OnPrem ===|"ExpressRoute"| ERGW
+    HubVNet <-->|"VNet Peering"| SpokeVNet
+
+    CorpUser -->|"1 HTTPS private"| AGCFrontend
+    AGCFrontend --> AGC
+    AGC -->|"2 Gateway API"| IngressCtrl
+
+    Pods -.->|"3 UDR 0.0.0.0/0"| AzFW
+    AzFW -->|"4 FQDN filtered"| Internet
+
+    DevOps -.->|"5 Private API"| APISnet
+
+    Pods -.->|"6 Private Endpoints"| PESnet
+
+    OnPremDNS -.->|"7 Conditional fwd"| PrivDNS
+
+    AKS -.->|"8 Metrics + Logs"| Prom
+    AKS -.->|"8"| LA
+```
+
+### Traffic Flows
+
+| # | Flow | Path | Notes |
+|---|---|---|---|
+| 1-2 | **Ingress** | Corp User -> ExpressRoute -> Hub -> Peering -> AGC Private Frontend -> ALB Controller -> Pods | All private, no public IP |
+| 3-4 | **Egress** | Pods -> UDR -> Hub Azure Firewall -> Internet | FQDN-filtered via `AzureKubernetesService` tag |
+| 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> Private API Server | VNet-integrated, private FQDN only |
+| 6 | **PaaS access** | Pods -> Private Endpoints (ACR, Key Vault, SQL, Storage) | Workload Identity authentication |
+| 7 | **DNS** | On-prem DNS -> Conditional Forwarder -> Hub Private DNS Zones | Resolves all private endpoints |
+| 8 | **Monitoring** | AKS -> Managed Prometheus + Container Insights -> Log Analytics | Central management subscription |
+
+---
+
+## AKS Automatic Components
+
+### SKU and Cluster Tier
 
 | Property | Value | Notes |
 |---|---|---|
 | `sku.name` | `Automatic` | Triggers the Automatic experience |
-| `sku.tier` | `Standard` | Always Standard tier – includes uptime SLA (99.95%), up to 5,000 nodes |
-| Support plan | `KubernetesOfficial` | LTS (`AKSLongTermSupport`) is available only on Premium tier (Standard SKU) |
+| `sku.tier` | `Standard` | Always Standard tier, uptime SLA (99.95%), up to 5,000 nodes |
+| Support plan | `KubernetesOfficial` | LTS available only on Premium tier with Standard SKU |
 
 ### Node Provisioning (Karpenter)
 
-AKS Automatic uses **Node Autoprovisioning (NAP)** powered by Karpenter. There are no manually managed node pools – the cluster creates and right-sizes nodes dynamically based on pending pod requests.
+AKS Automatic uses **Node Autoprovisioning (NAP)** powered by Karpenter. No manually managed node pools exist. The cluster creates and right-sizes nodes based on pending pod resource requests.
 
-| Property | Path | Fine-tunable? | Notes |
+| Property | Path | Configurable | Notes |
 |---|---|---|---|
-| Mode | `nodeProvisioningProfile.mode` | **No** – must be `Auto` | Core differentiator |
-| Default node pools | `nodeProvisioningProfile.defaultNodePools` | Yes (`None` / `Auto`) | Controls default Karpenter NodePool CRDs |
-| System pool | `agentPoolProfiles[0]` | Partially | VM size is dynamically selected; influence via quota |
-| Node OS | Always **Azure Linux** | **No** | Preconfigured |
-| Node auto-repair | Always enabled | **No** | Preconfigured |
-| Node resource group | **ReadOnly** | **No** | Locked to prevent accidental changes |
+| Mode | `nodeProvisioningProfile.mode` | No, must be `Auto` | Core differentiator |
+| Default pools | `nodeProvisioningProfile.defaultNodePools` | Yes (`None` / `Auto`) | Controls default Karpenter NodePool CRDs |
+| System pool | `agentPoolProfiles[0]` | Partially | VM size dynamically selected based on quota |
+| Node OS | Azure Linux | No | Preconfigured, immutable |
+| Node auto-repair | Enabled | No | Preconfigured |
+| Node resource group | ReadOnly | No | Locked to prevent changes |
 
-**Post-deployment tuning via Karpenter CRDs:**
+Post-deployment tuning via Karpenter CRDs:
 
-- Create `NodePool` CRDs → influence VM families, spot vs. on-demand, taints, labels, topology spread
-- Create `AKSNodeClass` CRDs → configure OS disk type/size, image version
-- Set `.spec.limits` on NodePool → cap total vCPU/memory per pool
-
----
+- `NodePool` CRDs: VM families, spot vs on-demand, taints, labels, topology spread, `.spec.limits` for vCPU/memory caps
+- `AKSNodeClass` CRDs: OS disk type/size, node image version
 
 ### Networking
 
-AKS Automatic uses **Azure CNI Overlay powered by Cilium** – a high-performance, eBPF-based data plane with integrated network policy enforcement.
+AKS Automatic uses **Azure CNI Overlay powered by Cilium** with eBPF-based data plane and integrated network policy enforcement.
 
-| Component | Setting | Fine-tunable? |
+| Component | Setting | Configurable |
 |---|---|---|
-| Network plugin | `azure` (CNI Overlay) | **No** – preconfigured |
-| Network plugin mode | `overlay` | **No** |
-| Network dataplane | `cilium` | **No** |
-| Network policy | `cilium` | **No** |
-| Load balancer SKU | `standard` | **No** |
-| API server VNet integration | Always enabled | **No** – preconfigured |
-| Pod CIDR | Default `10.244.0.0/16` | **Yes** – `networkProfile.podCidr` |
-| Service CIDR | Default `10.0.0.0/16` | **Yes** – `networkProfile.serviceCidr` |
-| DNS service IP | Auto-assigned | **Yes** – `networkProfile.dnsServiceIP` |
-| VNet | Managed (auto-created) | **Yes** – BYO VNet supported |
-| Outbound type | `managedNATGateway` (managed VNet) | **Yes** – see [Egress](#egress) |
-| ACNS | Optional | **Yes** – container network observability |
-| Service mesh | Optional – Istio or BYO | **Yes** – `serviceMeshProfile` |
-
----
+| Network plugin | `azure` (CNI Overlay) | No |
+| Network plugin mode | `overlay` | No |
+| Network dataplane | `cilium` | No |
+| Network policy engine | `cilium` | No |
+| Load balancer SKU | `standard` | No |
+| API server VNet integration | Enabled | No |
+| Pod CIDR | Default `10.244.0.0/16` | Yes - `networkProfile.podCidr` |
+| Service CIDR | Default `10.0.0.0/16` | Yes - `networkProfile.serviceCidr` |
+| DNS service IP | Auto-assigned | Yes - `networkProfile.dnsServiceIP` |
+| VNet | Managed (auto-created) | Yes - BYO VNet supported |
+| Outbound type | `managedNATGateway` | Yes - see [Egress](#egress) |
+| Service mesh | Not enabled | Yes - `serviceMeshProfile` for Istio |
 
 ### Ingress
 
-AKS Automatic supports multiple ingress patterns. In an ALZ Corp (private connectivity) scenario, **Application Gateway for Containers (AGC)** is the recommended L7 ingress, while **Application Routing (managed NGINX)** is preconfigured and always available. All options below can coexist on the same cluster.
+AKS Automatic supports three ingress options. All use the **Kubernetes Gateway API** (`GatewayClass`, `Gateway`, `HTTPRoute`). The legacy `Ingress` resource type is being superseded by Gateway API and should not be used for new deployments.
 
-> See [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio) for a full architecture diagram showing traffic flows.
+#### Application Gateway for Containers (recommended for ALZ Corp)
 
-#### Option 1 – Application Gateway for Containers (recommended for Corp / ALZ)
-
-AGC is the next-generation L7 load balancer for AKS. It replaces the legacy Application Gateway Ingress Controller (AGIC) and supports the **Kubernetes Gateway API** natively.
+AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. It operates as a separate Azure resource outside the AKS data plane.
 
 ```
-Corp User → ExpressRoute → VNet Peering → AGC Private Frontend (snet-agc) → ALB Controller → Pods
+Corp User -> ExpressRoute -> Peering -> AGC Private Frontend -> ALB Controller -> Pods
 ```
 
 | Aspect | Detail |
 |---|---|
-| **AKS integration** | Deployed as an **AKS managed add-on** (required for AKS Automatic). No Helm install needed. |
-| **Subnet** | Requires a dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`. Minimum **/24**. |
-| **Private ingress** | AGC frontends expose a private FQDN. In Corp scenarios, create a CNAME in the hub Private DNS Zone pointing to this FQDN. |
-| **Gateway API** | Use `GatewayClass`, `Gateway`, and `HTTPRoute` CRDs. ALB Controller translates these to AGC configuration. |
-| **Ingress API** | Also supports classic `Ingress` resources (useful for migration from AGIC). |
-| **WAF** | Optional WAF policy can be attached to the AGC security policy resource. |
-| **TLS termination** | SSL termination at the AGC frontend. Supports ECDSA + RSA certs, end-to-end SSL, and mTLS. |
-| **Traffic splitting** | Weighted round-robin across backend services (canary / blue-green). |
-| **Identity (RBAC)** | The `applicationloadbalancer-<cluster-name>` managed identity needs: `AppGw for Containers Configuration Manager` + `Network Contributor` + `Reader` on the MC resource group. The AKS add-on configures this automatically. |
-| **Deployment modes** | **ALB-managed** (AGC lifecycle managed by ALB Controller via `ApplicationLoadBalancer` CRD) or **BYO** (AGC provisioned via Terraform/ARM, referenced in `Gateway` CRD). |
+| AKS integration | AKS managed add-on (required for AKS Automatic) |
+| Subnet | Dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`, minimum /24 |
+| Private ingress | Private FQDN on the frontend. CNAME in hub Private DNS Zone for corp resolution |
+| API model | `GatewayClass`, `Gateway`, `HTTPRoute` CRDs |
+| WAF | Optional WAF policy on AGC security policy resource |
+| TLS | SSL termination, ECDSA + RSA, end-to-end SSL, mTLS |
+| Traffic splitting | Weighted round-robin via `HTTPRoute` weights (canary, blue-green) |
+| Identity | `applicationloadbalancer-<cluster>` managed identity, auto-configured by add-on |
+| Deployment modes | ALB-managed (`ApplicationLoadBalancer` CRD) or BYO (Terraform/ARM provisioned) |
 
-**Corp / Private connectivity considerations:**
-- AGC private frontends do **not** require a public IP – traffic enters via ExpressRoute/VPN through hub and peering.
-- DNS for the AGC frontend FQDN must resolve privately. Add a CNAME in the hub-linked **Private DNS Zone** pointing to the generated `*.appgw.azure.com` FQDN.
-- The AGC association subnet must be in the **same VNet and region** as the AKS cluster.
-- AGC operates **outside** the AKS data plane – it is a separate Azure resource in the spoke VNet.
+Corp considerations:
 
-#### Option 2 – Application Routing (managed NGINX) – preconfigured
+- Private frontends require no public IP. Traffic enters via ExpressRoute/VPN through hub peering.
+- DNS resolution requires a CNAME in the hub-linked Private DNS Zone pointing to the `*.appgw.azure.com` FQDN.
+- The AGC association subnet must be in the same VNet and region as the AKS cluster.
 
-```
-Client → Azure Internal LB → managed NGINX Ingress Controller → K8s Services
-```
+#### Application Routing Add-on (managed NGINX, preconfigured)
 
-| Feature | How to configure | Notes |
-|---|---|---|
-| **Basic ingress** | `Ingress` with `ingressClassName: webapprouting.kubernetes.azure.com` | Works out of the box, always enabled |
-| **Automatic DNS** | `dns_zone_resource_ids` → `ingressProfile.webAppRouting.dnsZoneResourceIds` | Supports public + private DNS zones |
-| **TLS certificates** | Annotate `Ingress` with `kubernetes.azure.com/tls-cert-keyvault-uri` | Fetches and rotates certs from Key Vault |
-| **Internal-only** | Annotate the NGINX `Service` with `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` | Creates an internal LB for corp-only access |
-
-**Corp considerations:** In private/corp deployments, configure the NGINX service as internal (no public LB). DNS records in the hub Private DNS Zone should point to the internal LB IP.
-
-#### Option 3 – Istio Service Mesh Ingress Gateway (optional)
+Always enabled on AKS Automatic. Deploys a managed NGINX-based controller supporting Gateway API.
 
 ```
-Client → Istio Ingress Gateway (Envoy) → VirtualService → K8s Services
+Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing NGINX -> Pods
+```
+
+| Feature | Configuration |
+|---|---|
+| Gateway API | `Gateway` + `HTTPRoute` with `webapprouting.kubernetes.azure.com` GatewayClass |
+| DNS integration | `ingressProfile.webAppRouting.dnsZoneResourceIds` (public and private zones) |
+| TLS from Key Vault | Reference certs in `Gateway` listener config, automatic rotation |
+| Internal-only | `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation on Service |
+
+Corp considerations: Configure as internal LB only. Point hub Private DNS Zone records to the internal LB IP.
+
+#### Istio Service Mesh Ingress Gateway (optional)
+
+Envoy-based ingress supporting Gateway API natively.
+
+```
+Corp User -> ExpressRoute -> Peering -> Internal Istio Gateway -> HTTPRoute -> Pods
 ```
 
 | Component | Configuration |
 |---|---|
-| Enable | `serviceMeshProfile.mode = "Istio"` in the cluster body |
+| Enable | `serviceMeshProfile.mode = "Istio"` |
 | Ingress gateway | `istio.components.ingressGateways[].enabled = true` |
-| Gateway mode | `External` (public LB) or `Internal` (internal LB – use for Corp) |
-| mTLS | `PeerAuthentication` CRDs post-deployment |
-| Traffic management | `VirtualService`, `DestinationRule` CRDs |
+| Internal mode | Set `mode: "Internal"` for corp-only access |
+| Gateway API | `Gateway` + `HTTPRoute` with Istio GatewayClass |
+| mTLS | `PeerAuthentication` CRDs |
 
-**Corp considerations:** Set `mode: "Internal"` on the Istio ingress gateway for private-only access. When combined with UDR egress, ensure the hub firewall allows return traffic to the internal LB frontend.
-
-#### Option 4 – BYO Ingress Controller (e.g., Traefik, HAProxy, Contour)
-
-Deploy any ingress controller via Helm or manifests. AKS Automatic does not restrict third-party controllers. Ensure the controller's `Service` is annotated for an internal LB in corp scenarios.
+Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub firewall must allow return traffic to the Istio LB frontend IP.
 
 #### Ingress Comparison
 
-| | AGC | App Routing (NGINX) | Istio Gateway | BYO |
-|---|---|---|---|---|
-| **Preconfigured** | No (add-on) | **Yes** | No (opt-in) | No |
-| **Gateway API** | ✅ native | ❌ | ✅ | Varies |
-| **L7 features** | Full (WAF, mTLS, rewrites, splits) | Basic (host/path routing) | Advanced (traffic mgmt) | Varies |
-| **Private frontend** | ✅ (private FQDN) | ✅ (internal LB annotation) | ✅ (internal mode) | ✅ |
-| **ALZ Corp recommended** | **✅ Primary** | ✅ Simple workloads | ✅ Service mesh | ✅ |
-| **Managed by** | Azure (AGC resource) | AKS (in-cluster) | AKS (in-cluster) | You |
-
----
+| | AGC | App Routing (NGINX) | Istio Gateway |
+|---|---|---|---|
+| Preconfigured | No (add-on) | Yes | No (opt-in) |
+| Gateway API | ✅ | ✅ | ✅ |
+| L7 features | WAF, mTLS, rewrites, traffic splits | Host/path routing, TLS | Traffic mgmt, mTLS, fault injection |
+| Private frontend | ✅ private FQDN | ✅ internal LB | ✅ internal mode |
+| ALZ Corp recommended | ✅ Primary | ✅ Simple workloads | ✅ Service mesh |
+| Managed by | Azure (AGC resource) | AKS (in-cluster) | AKS (in-cluster) |
 
 ### Egress
 
-Egress (outbound connectivity) defines how pods reach the internet and external services. In an ALZ Corp deployment, the standard pattern is **UDR through the hub Azure Firewall**.
+In an ALZ Corp deployment, the standard pattern is **UDR through the hub Azure Firewall**. Four egress options are available depending on the VNet configuration.
 
-#### Managed VNet – Managed NAT Gateway (default, non-corp)
-
-```
-Pods → Node → Managed NAT Gateway (auto-created) → Internet
-```
-
-- **When:** `enable_byo_vnet = false`
-- **Behaviour:** AKS creates and manages a NAT Gateway automatically.
-- **Fine-tuning:** None – fully managed.
-- **Not recommended for Corp** – egress is unfiltered, no centralised logging.
-
-#### BYO VNet – User-Assigned NAT Gateway
+#### Managed NAT Gateway (managed VNet only)
 
 ```
-Pods → Node (snet-aks-nodes) → NAT Gateway (your resource) → Public IP → Internet
+Pods -> Node -> Managed NAT Gateway -> Internet
 ```
 
-- **When:** `enable_byo_vnet = true`, `egress_type = "userAssignedNATGateway"`
-- **Resources created:** Public IP (`pip-natgw-*`) + NAT Gateway (`natgw-*`), associated to the node subnet.
-- **Benefits:** Deterministic outbound IP, 64k SNAT ports per public IP, scalable (add more PIPs).
-- **Fine-tuning:**
-  - `nat_gateway_idle_timeout` – idle timeout (4–120 minutes)
-  - Add additional public IPs post-deployment for more SNAT capacity
-- **Corp note:** Provides static IPs for allowlisting but no centralised FQDN filtering. Combine with Cilium L7 policies or ACNS for in-cluster egress control.
+- `enable_byo_vnet = false`
+- AKS creates and manages the NAT Gateway. No configuration available.
+- Not suitable for Corp: egress is unfiltered with no centralised logging.
 
-#### BYO VNet – Load Balancer (dev/test only)
+#### User-Assigned NAT Gateway (BYO VNet)
 
 ```
-Pods → Node → AKS Standard Load Balancer (SNAT) → Internet
+Pods -> Node -> NAT Gateway -> Public IP -> Internet
 ```
 
-- **When:** `enable_byo_vnet = true`, `egress_type = "loadBalancer"`
-- **Resources created:** None extra – AKS uses the Standard LB.
-- **Trade-offs:** Fewer SNAT ports (~1k per node), no static outbound IP, risk of SNAT exhaustion under load.
-- **Best for:** Dev/test environments only.
+- `egress_type = "userAssignedNATGateway"`
+- Creates Public IP + NAT Gateway associated to the node subnet.
+- 64k SNAT ports per public IP, deterministic outbound IP.
+- `nat_gateway_idle_timeout` configurable (4-120 minutes).
+- No centralised FQDN filtering. Combine with Cilium L7 policies for in-cluster egress control.
 
-#### BYO VNet – User-Defined Routing / Forced Tunnelling (recommended for Corp / ALZ)
+#### Standard Load Balancer (BYO VNet, dev/test only)
 
 ```
-Pods → Node (snet-aks-nodes) → UDR (0.0.0.0/0 → 10.0.1.4) → Hub Azure Firewall → Internet
+Pods -> Node -> AKS Standard LB (SNAT) -> Internet
 ```
 
-- **When:** `enable_byo_vnet = true`, `egress_type = "userDefinedRouting"`
-- **Resources created:** Route Table (`rt-*`) with a default route to `firewall_private_ip`.
-- **Requirements:**
-  - An existing NVA/Azure Firewall with the [AKS required egress rules](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress) whitelisted.
-  - Set `var.firewall_private_ip` to the NVA's private IP.
-- **Benefits:** Centralised egress filtering, compliance, DLP, full logging in Azure Firewall Diagnostics.
+- `egress_type = "loadBalancer"`
+- No additional resources created.
+- Limited SNAT ports (~1k per node), no static outbound IP, SNAT exhaustion risk.
 
-**Required outbound FQDNs (Azure Firewall `AzureKubernetesService` FQDN tag covers most):**
+#### User-Defined Routing (BYO VNet, recommended for ALZ Corp)
 
-| FQDN / Endpoint | Port | Purpose |
+```
+Pods -> Node -> UDR 0.0.0.0/0 -> Hub Azure Firewall -> Internet
+```
+
+- `egress_type = "userDefinedRouting"`, `firewall_private_ip` required.
+- Creates Route Table with default route to the hub firewall private IP.
+- Centralised FQDN filtering, compliance logging, DLP.
+
+**Required outbound FQDNs** (Azure Firewall `AzureKubernetesService` FQDN tag covers most):
+
+| FQDN | Port | Purpose |
 |---|---|---|
-| `*.hcp.<region>.azmk8s.io` | 443 | AKS API server communication |
-| `mcr.microsoft.com` | 443 | Microsoft Container Registry (system images) |
+| `*.hcp.<region>.azmk8s.io` | 443 | API server communication |
+| `mcr.microsoft.com` | 443 | System container images |
 | `*.data.mcr.microsoft.com` | 443 | MCR data endpoint |
 | `management.azure.com` | 443 | Azure Resource Manager |
 | `login.microsoftonline.com` | 443 | Entra ID authentication |
-| `packages.microsoft.com` | 443 | OS packages (Azure Linux) |
-| `acs-mirror.azurelinux.com` | 443 | Azure Linux package mirror |
+| `packages.microsoft.com` | 443 | Azure Linux packages |
+| `acs-mirror.azurelinux.com` | 443 | Azure Linux mirror |
 | `dc.services.visualstudio.com` | 443 | Container Insights telemetry |
-| `*.monitoring.azure.com` | 443 | Managed Prometheus metrics |
+| `*.monitoring.azure.com` | 443 | Managed Prometheus |
 | `*.ods.opinsights.azure.com` | 443 | Log Analytics ingestion |
-| `*.oms.opinsights.azure.com` | 443 | Log Analytics agent |
 
-**Additional rules needed beyond the FQDN tag:**
+Additional rules beyond the FQDN tag:
 
-| FQDN / Endpoint | Purpose |
+| FQDN | Purpose |
 |---|---|
-| `<your-acr-name>.azurecr.io` | Application container images |
+| `<acr-name>.azurecr.io` | Application container images |
 | Helm chart registries | Third-party charts |
-| External APIs | Workload-specific outbound calls |
-| `ghcr.io`, `docker.io` (if used) | Public registries |
+| Workload-specific external APIs | Application dependencies |
 
-**Azure Firewall sizing for AKS:**
-- Minimum **20 frontend public IPs** in production to avoid SNAT port exhaustion.
-- Use **Azure Firewall Premium** for TLS inspection if required by security policy.
-- The route table is associated to the **node subnet only**. The API server subnet must **NOT** have a route table.
+Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNAT exhaustion. The route table applies to the **node subnet only**. The API server subnet must not have a route table.
 
 #### Egress Comparison
 
 | | Managed NAT GW | User NAT GW | Load Balancer | UDR |
 |---|---|---|---|---|
-| **BYO VNet** | ❌ managed only | ✅ | ✅ | ✅ |
-| **Static outbound IP** | ❌ | ✅ | ❌ | Via NVA |
-| **SNAT ports** | High (auto) | 64k per PIP | Limited (~1k per node) | Via NVA |
-| **Centralised filtering** | ❌ | ❌ | ❌ | ✅ |
-| **Terraform variable** | (default) | `userAssignedNATGateway` | `loadBalancer` | `userDefinedRouting` |
-
----
-
-### BYO VNet
-
-Bring-Your-Own VNet gives you full control over the network topology, peering, DNS, and egress path.
-
-#### Network Topology (Corp / ALZ)
-
-> 📐 A detailed DrawIO diagram is available at [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Spoke VNet: 10.10.0.0/16   (peered to Hub VNet)                           │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  snet-aks-nodes: 10.10.0.0/22                                        │  │
-│  │  ├── NSG (AKS manages rules)                                         │  │
-│  │  ├── UDR → 10.0.1.4 (Hub Azure Firewall)                             │  │
-│  │  │                                                                    │  │
-│  │  │  ┌─ AKS Automatic ───────────────────────────────────────────┐     │  │
-│  │  │  │  System Pool + Karpenter NodePools (Azure Linux)          │     │  │
-│  │  │  │  App Routing (NGINX) | ALB Controller (AGC) | Istio       │     │  │
-│  │  │  │  Pods (overlay: 10.244.0.0/16, svc: 10.245.0.0/16)      │     │  │
-│  │  │  └───────────────────────────────────────────────────────────┘     │  │
-│  │  │                                                                    │  │
-│  │  Worker nodes placed here. Pod IPs from overlay, NOT this subnet.     │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  snet-aks-apiserver: 10.10.4.0/28                                     │  │
-│  │  ├── Delegation: Microsoft.ContainerService/managedClusters           │  │
-│  │  └── K8s API Server (private FQDN, VNet integrated)                   │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  snet-agc: 10.10.8.0/24                                               │  │
-│  │  ├── Delegation: Microsoft.ServiceNetworking/trafficControllers       │  │
-│  │  └── Application Gateway for Containers (private frontend)            │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  snet-private-endpoints: 10.10.12.0/24                                │  │
-│  │  └── Private Endpoints: ACR, Key Vault, Storage, SQL/CosmosDB         │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-│  │  │                                                     │  │
-│  │  API server VNet integration places the API server     │  │
-│  │  endpoint in this subnet. Minimum /28.                 │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                                                             │
-│  Overlay network (not visible in VNet):                     │
-│    Pod CIDR:     10.244.0.0/16                              │
-│    Service CIDR: 10.245.0.0/16                              │
-│    DNS IP:       10.245.0.10                                │
-└─────────────────────────────────────────────────────────────┘
-```
-
-#### Subnet Sizing Guidelines
-
-| Subnet | Minimum | Recommended | Notes |
-|---|---|---|---|
-| **Node subnet** | /24 (254 nodes) | /22 (1,022 nodes) | One IP per node. Overlay means pods don't consume IPs here. |
-| **API server subnet** | /28 (11 usable) | /28 | Only the API server endpoint lives here. /28 is sufficient. |
-| **AGC subnet** | /24 (256 IPs) | /24 | Required by Application Gateway for Containers. Must be dedicated + delegated. |
-| **Private endpoints subnet** | /24 | /24 | Hosts PEs for ACR, Key Vault, Storage, databases. |
-
-#### Key Requirements
-
-- The **API server subnet** MUST have a delegation to `Microsoft.ContainerService/managedClusters`.
-- The **API server subnet** MUST NOT have a NAT Gateway or Route Table association.
-- The **AGC subnet** MUST have a delegation to `Microsoft.ServiceNetworking/trafficControllers`.
-- The **node subnet** SHOULD have an NSG (AKS injects required rules automatically) and a UDR (for Corp egress via hub firewall).
-- All subnets must be in the same VNet and region as the AKS cluster.
-- Ensure no CIDR overlaps between VNet address space, pod CIDR, service CIDR, hub VNet, and on-prem networks.
-
-#### Switching Between Managed and BYO VNet
-
-| Variable | Managed VNet | BYO VNet |
-|---|---|---|
-| `enable_byo_vnet` | `false` | `true` |
-| `vnet_*`, `node_subnet_*`, `apiserver_subnet_*` | Ignored | Required |
-| `egress_type` | Ignored (always `managedNATGateway`) | `userAssignedNATGateway` / `loadBalancer` / `userDefinedRouting` |
-| `pod_cidr`, `service_cidr`, `dns_service_ip` | Optional | Recommended |
-
----
+| BYO VNet | ❌ | ✅ | ✅ | ✅ |
+| Static outbound IP | ❌ | ✅ | ❌ | Via firewall |
+| SNAT ports | High (auto) | 64k per PIP | ~1k per node | Via firewall |
+| Centralised filtering | ❌ | ❌ | ❌ | ✅ |
+| ALZ Corp suitable | ❌ | Partial | ❌ | ✅ |
+| Terraform variable | default | `userAssignedNATGateway` | `loadBalancer` | `userDefinedRouting` |
 
 ### Security
 
-| Component | Setting | Fine-tunable? |
+| Component | Setting | Configurable |
 |---|---|---|
-| Auth & authZ | Azure RBAC for Kubernetes | **No** – preconfigured, local accounts disabled |
-| Workload Identity | Enabled (Entra Workload ID) | **No** – preconfigured |
-| OIDC Issuer | Enabled | **No** – preconfigured |
-| API server VNet integration | Enabled | **No** – preconfigured |
-| Image Cleaner | Enabled (default 48h) | **Yes** – `image_cleaner_interval_hours` |
-| Deployment Safeguards | Enabled via Azure Policy | **No** – preconfigured (Warning mode) |
-| Defender for Containers | Optional | **Yes** – `securityProfile.defender` |
-| Azure Key Vault KMS | Optional | **Yes** – `securityProfile.azureKeyVaultKms` |
-| Custom CA trust certs | Optional (up to 10) | **Yes** – `securityProfile.customCATrustCertificates` |
-| Private cluster | Optional | **Yes** – `enable_private_cluster` |
-| Authorized IP ranges | Optional | **Yes** – `authorized_ip_ranges` |
+| Authentication and authorisation | Azure RBAC for Kubernetes | No, local accounts disabled |
+| Workload Identity | Entra Workload ID | No |
+| OIDC Issuer | Enabled | No |
+| API server VNet integration | Enabled | No |
+| Image Cleaner | Enabled, default 48h interval | Yes - `image_cleaner_interval_hours` |
+| Deployment Safeguards | Azure Policy, Warning mode | No (severity adjustable via Policy) |
+| Defender for Containers | Optional | Yes - `securityProfile.defender` |
+| Azure Key Vault KMS | Optional | Yes - `securityProfile.azureKeyVaultKms` |
+| Custom CA trust certs | Optional, up to 10 | Yes - `securityProfile.customCATrustCertificates` |
+| Private cluster | Optional | Yes - `enable_private_cluster` |
+| Authorised IP ranges | Optional | Yes - `authorized_ip_ranges` |
 
-### Monitoring & Observability
+### Monitoring and Observability
 
-| Component | Default state | Fine-tunable? |
+| Component | Default State | Configurable |
 |---|---|---|
-| Managed Prometheus | **Default** (enabled via CLI/Portal) | **Yes** – `enable_prometheus` |
-| Container Insights | **Default** (enabled via CLI/Portal) | **Yes** – configurable |
-| Azure Monitor Dashboards | Built-in via portal | **Yes** – link Managed Grafana |
-| ACNS network observability | Optional | **Yes** – via `advancedNetworking` |
-| Cost analysis | Optional | **Yes** – `metricsProfile.costAnalysis` |
+| Managed Prometheus | Enabled (CLI/Portal) | Yes - `enable_prometheus` |
+| Container Insights | Enabled (CLI/Portal) | Yes |
+| Azure Monitor Dashboards | Built-in via portal | Yes - link Managed Grafana |
+| ACNS network observability | Not enabled | Yes - `advancedNetworking` |
+| Cost analysis | Not enabled | Yes - `metricsProfile.costAnalysis` |
 
-### Auto-Upgrade & Maintenance
+### Auto-Upgrade and Maintenance
 
-| Component | Setting | Fine-tunable? |
+| Component | Setting | Configurable |
 |---|---|---|
-| Cluster auto-upgrade | **Preconfigured** – `stable` | **Yes** – `upgrade_channel` (`rapid`, `stable`, `patch`, `node-image`) |
-| Node OS upgrade | **Preconfigured** – `NodeImage` | **Yes** – `node_os_upgrade_channel` (`NodeImage`, `SecurityPatch`, `Unmanaged`, `None`) |
-| K8s API deprecation detection | Always on | **No** |
-| Planned maintenance windows | **Default** – configurable | **Yes** – via `maintenanceConfigurations` |
+| Cluster auto-upgrade | `stable` channel | Yes - `upgrade_channel` |
+| Node OS upgrade | `NodeImage` channel | Yes - `node_os_upgrade_channel` |
+| K8s API deprecation detection | Enabled | No |
+| Planned maintenance windows | Configurable | Yes - `maintenanceConfigurations` |
 
 ### Scaling
 
-| Component | Setting | Fine-tunable? |
+| Component | Setting | Configurable |
 |---|---|---|
-| Node Autoprovisioning | Always on | **No** – core of Automatic |
-| HPA | Enabled | **Yes** – per-deployment |
-| KEDA | **Preconfigured** | **Yes** – `workloadAutoScalerProfile.keda` |
-| VPA | **Preconfigured** | **Yes** – `workloadAutoScalerProfile.verticalPodAutoscaler` |
-| Cluster autoscaler profile | Available | **Yes** – `autoScalerProfile.*` |
+| Node Autoprovisioning (NAP) | Enabled | No |
+| HPA | Enabled | Yes - per deployment |
+| KEDA | Enabled | Yes - `workloadAutoScalerProfile.keda` |
+| VPA | Enabled | Yes - `workloadAutoScalerProfile.verticalPodAutoscaler` |
+| Cluster autoscaler profile | Available | Yes - `autoScalerProfile.*` |
 
 ### Storage
 
-| Component | Default | Fine-tunable? |
+| Component | Default | Configurable |
 |---|---|---|
-| Azure Disk CSI | Enabled | **Yes** – `storageProfile.diskCSIDriver` |
-| Azure Files CSI | Enabled | **Yes** – `storageProfile.fileCSIDriver` |
-| Azure Blob CSI | Disabled | **Yes** – `storageProfile.blobCSIDriver` |
-| Snapshot controller | Enabled | **Yes** – `storageProfile.snapshotController` |
+| Azure Disk CSI | Enabled | Yes - `storageProfile.diskCSIDriver` |
+| Azure Files CSI | Enabled | Yes - `storageProfile.fileCSIDriver` |
+| Azure Blob CSI | Disabled | Yes - `storageProfile.blobCSIDriver` |
+| Snapshot controller | Enabled | Yes - `storageProfile.snapshotController` |
 
 ### Policy Enforcement
 
-| Component | Setting | Fine-tunable? |
+| Component | Setting | Configurable |
 |---|---|---|
-| Deployment Safeguards | **Preconfigured** – Warning mode | Severity changeable to `Enforcement` |
-| Custom Azure Policies | Optional | **Yes** |
-| Managed namespaces | Optional | **Yes** |
+| Deployment Safeguards | Warning mode | Severity changeable to Enforcement |
+| Custom Azure Policies | Not assigned | Yes |
+| Managed namespaces | Not enabled | Yes |
 
 ---
 
-## What Is Preconfigured vs. What You Can Fine-Tune
+## Preconfigured vs Fine-Tunable
 
-### 🔒 Preconfigured (cannot be changed)
+### Preconfigured (immutable)
+
+The following are always enabled on AKS Automatic and cannot be disabled or changed:
 
 - Node Autoprovisioning mode = `Auto`
 - Azure Linux node OS
-- Azure CNI Overlay + Cilium networking stack
-- Azure RBAC for Kubernetes authorization (local accounts disabled)
+- Azure CNI Overlay + Cilium
+- Azure RBAC for Kubernetes authorisation (local accounts disabled)
 - Workload Identity + OIDC Issuer
 - API server VNet integration
 - Image Cleaner
 - Deployment Safeguards (Azure Policy)
-- Managed NAT Gateway (on managed VNet)
-- Application Routing (managed NGINX)
+- Managed NAT Gateway (when using managed VNet)
+- Application Routing add-on (managed NGINX)
 - Node auto-repair
 - Standard tier with uptime SLA
-- ReadOnly node resource group lockdown
+- ReadOnly node resource group
 - K8s API deprecation detection on upgrade
 
-### 🔧 Fine-tunable
+### Fine-tunable
 
-| Category | What you can tune |
+| Category | Parameters |
 |---|---|
-| **Kubernetes version** | `kubernetes_version` |
-| **Upgrade channels** | `upgrade_channel`, `node_os_upgrade_channel` |
-| **Maintenance windows** | Via `maintenanceConfigurations` |
-| **Networking** | BYO VNet, pod/service CIDRs, DNS service IP |
-| **Egress** | NAT Gateway, Load Balancer, or UDR (BYO VNet only) |
-| **Ingress** | DNS zones for Application Routing, Istio service mesh |
-| **Private cluster** | `enable_private_cluster`, `authorized_ip_ranges` |
-| **Monitoring** | Prometheus, Container Insights, Managed Grafana |
-| **Scaling** | KEDA, VPA, HPA, autoscaler profile |
-| **Storage** | Disk/File/Blob CSI drivers, snapshot controller |
-| **Security** | Defender, Key Vault KMS, CA trust certs, image cleaner interval |
-| **Node customization** | Via Karpenter `NodePool` / `AKSNodeClass` CRDs post-deployment |
+| Kubernetes version | `kubernetes_version` |
+| Upgrade channels | `upgrade_channel`, `node_os_upgrade_channel` |
+| Maintenance windows | `maintenanceConfigurations` |
+| Networking | BYO VNet, pod/service CIDRs, DNS service IP |
+| Egress | NAT Gateway, Load Balancer, or UDR (BYO VNet) |
+| Ingress | AGC add-on, DNS zones for App Routing, Istio |
+| Private cluster | `enable_private_cluster`, `authorized_ip_ranges` |
+| Monitoring | Prometheus, Container Insights, Managed Grafana |
+| Scaling | KEDA, VPA, HPA, autoscaler profile |
+| Storage | Disk/File/Blob CSI drivers, snapshot controller |
+| Security | Defender, Key Vault KMS, CA trust certs, image cleaner interval |
+| Node customisation | Karpenter `NodePool` / `AKSNodeClass` CRDs post-deployment |
+
+---
+
+## BYO VNet Topology
+
+```
+Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
+
+  snet-aks-nodes         10.10.0.0/22    NSG + UDR -> Hub Firewall
+    AKS Automatic cluster
+      System Pool + Karpenter NodePools (Azure Linux)
+      App Routing (NGINX) | ALB Controller (AGC) | Istio
+      Pods (overlay: 10.244.0.0/16, services: 10.245.0.0/16)
+
+  snet-aks-apiserver     10.10.4.0/28    Delegated: Microsoft.ContainerService/managedClusters
+    K8s API Server (private FQDN, VNet integrated)
+
+  snet-agc               10.10.8.0/24    Delegated: Microsoft.ServiceNetworking/trafficControllers
+    Application Gateway for Containers (private frontend)
+
+  snet-private-endpoints 10.10.12.0/24
+    Private Endpoints: ACR, Key Vault, Storage, SQL/CosmosDB
+```
+
+### Subnet Sizing
+
+| Subnet | Minimum | Recommended | Notes |
+|---|---|---|---|
+| Node subnet | /24 (254 nodes) | /22 (1,022 nodes) | One IP per node. Pod IPs from overlay, not this subnet. |
+| API server subnet | /28 (11 usable) | /28 | API server endpoint only. /28 is sufficient. |
+| AGC subnet | /24 (256 IPs) | /24 | Required by AGC. Dedicated and delegated. |
+| Private endpoints | /24 | /24 | ACR, Key Vault, Storage, database PEs. |
+
+### Subnet Requirements
+
+- The API server subnet MUST have delegation to `Microsoft.ContainerService/managedClusters`.
+- The API server subnet MUST NOT have a NAT Gateway or Route Table.
+- The AGC subnet MUST have delegation to `Microsoft.ServiceNetworking/trafficControllers`.
+- The node subnet SHOULD have an NSG and a UDR for Corp egress.
+- All subnets must be in the same VNet and region.
+- No CIDR overlaps between VNet address space, pod CIDR, service CIDR, hub VNet, and on-premises networks.
+
+---
+
+## Azure Landing Zone Caveats
+
+This module deploys into a **Corp spoke subscription** within an Azure Landing Zone using [Azure Verified Modules (AVM) for Platform Landing Zones](https://aka.ms/alz/acc/tf). The following caveats and implementation considerations apply.
+
+### VNet and Subnet Ownership
+
+In ALZ, the connectivity subscription owns the hub VNet and the platform team manages peering. This module creates its own spoke VNet in `network.tf`.
+
+**What you must handle externally:**
+
+- Peer the spoke VNet to the ALZ hub. This module does not create peering resources.
+- If the platform team pre-provisions spoke VNets, set `enable_byo_vnet = false` and modify `locals.tf` to accept external subnet IDs via variables instead of referencing `azapi_resource.node_subnet[0].id`.
+
+### CIDR Coordination
+
+ALZ enforces centralised IP address management (IPAM). The default CIDRs in this module (`10.10.0.0/16` VNet, `10.244.0.0/16` pod overlay, `10.245.0.0/16` services) must not overlap with:
+
+- Hub VNet CIDR (typically `10.0.0.0/16`)
+- Other spoke VNets
+- On-premises address space connected via ExpressRoute or VPN
+- Other AKS clusters sharing DNS or service mesh
+
+**Action:** Coordinate all CIDR allocations with the ALZ platform team before deployment. Update `variables.tf` defaults to match allocated ranges.
+
+### Private DNS Zone Management
+
+AKS Automatic with private cluster enabled uses a private FQDN requiring a `privatelink.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet.
+
+In ALZ, Private DNS Zones are hosted in the **connectivity subscription** and managed by the platform team. This module must not create duplicate zones.
+
+**Implementation guidance:**
+
+- For private API server: the platform team must create the `privatelink.<region>.azmk8s.io` zone and link it to both hub and spoke VNets.
+- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `DNS Zone Contributor` on those zones, which is a cross-subscription RBAC assignment handled by the platform team or a separate Terraform configuration.
+- For AGC frontends: add a CNAME in the appropriate Private DNS Zone pointing to the generated `*.appgw.azure.com` FQDN.
+
+### Egress Through Hub Firewall
+
+The standard ALZ Corp pattern routes all spoke egress through the hub Azure Firewall via UDR.
+
+**Configuration:** Set `egress_type = "userDefinedRouting"` and `firewall_private_ip` to the hub firewall's private IP.
+
+**Firewall policy requirements:**
+
+The `AzureKubernetesService` FQDN tag on Azure Firewall covers most AKS system requirements. Additional rules are needed for:
+
+- Container registries: `<acr-name>.azurecr.io`, `ghcr.io`, `docker.io`
+- Helm chart repositories
+- External APIs consumed by workloads
+- Azure Linux packages: `packages.microsoft.com`, `acs-mirror.azurelinux.com`
+
+If the ALZ uses a third-party NVA instead of Azure Firewall, the `AzureKubernetesService` FQDN tag is not available. Each required FQDN must be whitelisted individually per the [AKS required outbound rules](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress).
+
+### Azure Policy Conflicts
+
+ALZ assigns Azure Policies at the management group level. AKS Automatic preconfigures Deployment Safeguards which internally uses Azure Policy. Conflicts between ALZ policies and AKS Automatic defaults can cause cluster creation failures.
+
+**Known conflict areas:**
+
+| ALZ Policy | Conflict |
+|---|---|
+| `Kubernetes clusters should not allow container privilege escalation` | May block AKS system components |
+| `Kubernetes cluster should not allow privileged containers` | AKS system pods require privileges |
+| `Network policies should be enforced on AKS clusters` | Already enforced by Cilium but policy may not detect this |
+| Policies enforcing specific NSG rules | AKS injects its own NSG rules that may violate strict policies |
+| Policies denying public IPs on subnets | NAT Gateway requires a public IP resource |
+
+**Action:** Audit ALZ policy assignments before deploying:
+
+```bash
+az policy assignment list --scope /subscriptions/<subscription-id> --output table
+```
+
+Request exemptions from the platform team for policies incompatible with AKS Automatic.
+
+### azapi vs AVM Compatibility
+
+This module uses `azapi_resource` for all Azure resources. AVM modules use `azurerm_*` resources.
+
+**Rules:**
+
+- Do not manage the same resource with both `azapi_resource` and `azurerm_*` in separate configurations. This causes state conflicts and drift.
+- Reference AVM-managed resources (VNet, Key Vault, DNS Zones) via data sources or resource ID variables, not by importing into this Terraform state.
+- When the ALZ platform team uses the [AVM Platform Landing Zone module](https://registry.terraform.io/modules/Azure/avm-ptn-alz/azurerm/latest), coordinate output values: hub firewall IP, peering resource IDs, Private DNS zone IDs, Log Analytics workspace ID.
+
+### RBAC and Identity Requirements
+
+AKS Automatic enforces Azure RBAC for Kubernetes (`aadProfile.enableAzureRBAC = true`, local accounts disabled).
+
+The cluster's SystemAssigned managed identity requires the following role assignments, which are **not created by this module**:
+
+| Role | Scope | Purpose |
+|---|---|---|
+| `Network Contributor` | BYO VNet and subnets | Node provisioning, subnet joins |
+| `DNS Zone Contributor` | DNS zones in connectivity subscription | Application Routing DNS record management |
+| `Key Vault Secrets User` | Key Vault(s) for TLS certs | Application Routing TLS certificate retrieval |
+| `AcrPull` | Azure Container Registry | Pull application container images |
+
+In ALZ, these are cross-subscription RBAC assignments that must be managed by the platform team or a separate Terraform state.
+
+### Monitoring Integration
+
+ALZ deploys a central Log Analytics workspace in the management subscription. To forward AKS Container Insights and Prometheus data to the central workspace, the workspace resource ID must be added to the cluster's `azureMonitorProfile` or `addonProfiles`. This module does not currently wire central workspace integration. Extend `main.tf` if centralised logging is required.
 
 ---
 
@@ -481,36 +624,40 @@ Bring-Your-Own VNet gives you full control over the network topology, peering, D
 
 ```
 aks-automatic-azapi/
-├── terraform.tf              # Terraform block, required providers, provider config
+├── terraform.tf              # Terraform block, providers
 ├── data.tf                   # Data sources (client config, subscription)
 ├── locals.tf                 # Computed values, conditional logic
-├── variables.tf              # All input variables (general, network, ingress, egress, security)
-├── network.tf                # BYO VNet: VNet, subnets, NSG, NAT Gateway, route table
-├── main.tf                   # Resource group + AKS Automatic cluster (azapi)
-├── outputs.tf                # All outputs (cluster, networking, resource group)
-├── terraform.tfvars.example  # Example variable values for common scenarios
-└── README.md                 # This file
+├── variables.tf              # All input variables
+├── network.tf                # BYO VNet resources (conditional)
+├── main.tf                   # Resource group + AKS cluster
+├── outputs.tf                # Outputs
+├── terraform.tfvars.example  # Example values for common scenarios
+├── .github/
+│   └── copilot-instructions.md
+├── docs/
+│   └── alz-corp-aks-automatic.drawio
+└── README.md
 ```
 
 | File | Responsibility |
 |---|---|
-| `terraform.tf` | Terraform version constraint, `azapi` + `azurerm` provider declarations |
-| `data.tf` | Read-only data sources for Azure context (subscription ID, tenant ID) |
-| `locals.tf` | Derived values – network conditionals, subnet IDs, outbound type |
-| `variables.tf` | All configurable inputs with descriptions, types, defaults, and validations |
-| `network.tf` | All BYO VNet resources (conditionally created when `enable_byo_vnet = true`) |
-| `main.tf` | Resource group (`azapi`) + AKS Automatic cluster (`azapi`) |
-| `outputs.tf` | Exported values for downstream consumption (FQDN, OIDC URL, subnet IDs) |
-| `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise for your environment |
+| `terraform.tf` | Terraform version constraint, azapi + azurerm provider declarations |
+| `data.tf` | Read-only data sources for Azure context |
+| `locals.tf` | Derived values: network conditionals, subnet IDs, outbound type |
+| `variables.tf` | All configurable inputs with descriptions, types, defaults, validations |
+| `network.tf` | All BYO VNet resources, conditionally created when `enable_byo_vnet = true` |
+| `main.tf` | Resource group (azapi) + AKS Automatic cluster (azapi) |
+| `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs |
+| `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise |
 
-### Why azapi?
+### Why azapi
 
-The `azapi` provider talks directly to the Azure Resource Manager REST API:
+The azapi provider communicates directly with the Azure Resource Manager REST API:
 
-- **Day-zero support** for new API versions and preview features
-- No waiting for `azurerm` to add support for new AKS properties
+- Day-zero support for new API versions and preview features
+- No dependency on azurerm provider release cycle for new AKS properties
 - Full control over the JSON body sent to ARM
-- Ideal for AKS Automatic which uses the newer `sku.name = "Automatic"` property
+- Required for `sku.name = "Automatic"` which is not yet in all azurerm versions
 
 ---
 
@@ -520,97 +667,94 @@ The `azapi` provider talks directly to the Azure Resource Manager REST API:
 
 - Terraform >= 1.9
 - Azure CLI authenticated (`az login`)
-- Subscription quota for ≥16 vCPUs of D-series VMs in the target region
-- Target region must support [API Server VNet Integration](https://learn.microsoft.com/azure/aks/api-server-vnet-integration) (GA)
-- Register `Microsoft.PolicyInsights` resource provider
+- Subscription quota for 16+ vCPUs of D-series VMs in the target region
+- Region must support API Server VNet Integration (GA)
+- `Microsoft.PolicyInsights` resource provider registered
 
 ### Quick Start
 
 ```bash
-# Copy and customise variables
 cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars for your environment
 
-# Initialise providers
 terraform init
-
-# Validate configuration
 terraform validate
-
-# Preview changes
 terraform plan
-
-# Deploy
 terraform apply
 ```
 
-### Scenario 1 – BYO VNet + NAT Gateway (production recommended)
+### Scenario 1: BYO VNet + NAT Gateway
 
 ```hcl
 enable_byo_vnet = true
 egress_type     = "userAssignedNATGateway"
 ```
 
-### Scenario 2 – BYO VNet + UDR / Firewall (enterprise)
+### Scenario 2: BYO VNet + UDR through Hub Firewall (ALZ Corp)
 
 ```hcl
 enable_byo_vnet     = true
 egress_type         = "userDefinedRouting"
-firewall_private_ip = "10.10.8.4"
+firewall_private_ip = "10.0.1.4"
 ```
 
-### Scenario 3 – Managed VNet (simplest)
+### Scenario 3: Managed VNet
 
 ```hcl
 enable_byo_vnet = false
 ```
 
-### Scenario 4 – Private cluster
+### Scenario 4: Private Cluster
 
 ```hcl
 enable_byo_vnet        = true
 enable_private_cluster = true
+egress_type            = "userDefinedRouting"
+firewall_private_ip    = "10.0.1.4"
 ```
 
-### Scenario 5 – Application Routing with Azure DNS
+### Scenario 5: Application Routing with DNS
 
 ```hcl
 dns_zone_resource_ids = [
-  "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/dnsZones/example.com"
+  "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/dnsZones/app.contoso.corp"
 ]
 ```
 
-### Connect to the cluster
+### Connect to the Cluster
 
 ```bash
-az aks get-credentials \
-  --resource-group rg-aks-automatic \
-  --name aks-automatic
-
+az aks get-credentials --resource-group rg-aks-automatic --name aks-automatic
 kubectl get nodes
 ```
 
 ---
 
-## Regional Availability & Limitations
+## Regional Availability and Limitations
 
-- AKS Automatic requires regions with **≥3 availability zones**, **ephemeral OS disk** support, and **Azure Linux** support.
-- Must be a region where **API Server VNet Integration** is GA.
-- System node pool VM size is dynamically selected – ensure quota for at least one of: `Standard_D4lds_v5`, `Standard_D4ads_v5`, `Standard_D4ds_v5`, `Standard_D4d_v5`, `Standard_DS3_v2`.
-- **Windows node pools** are not supported.
-- The node resource group is always **ReadOnly**.
+- Regions must support 3+ availability zones, ephemeral OS disk, and Azure Linux.
+- API Server VNet Integration must be GA in the target region.
+- System node pool VM size is dynamically selected. Ensure quota for at least one of: `Standard_D4lds_v5`, `Standard_D4ads_v5`, `Standard_D4ds_v5`, `Standard_D4d_v5`, `Standard_DS3_v2`.
+- Windows node pools are not supported.
+- The node resource group is ReadOnly.
 
 ---
 
 ## References
 
 - [What is AKS Automatic?](https://learn.microsoft.com/azure/aks/intro-aks-automatic)
-- [Quickstart: Create an AKS Automatic cluster](https://learn.microsoft.com/azure/aks/learn/quick-kubernetes-automatic-deploy)
+- [Create an AKS Automatic cluster](https://learn.microsoft.com/azure/aks/learn/quick-kubernetes-automatic-deploy)
 - [AKS Automatic with custom VNet](https://learn.microsoft.com/azure/aks/automatic/quick-automatic-custom-network)
 - [AKS Automatic private cluster](https://learn.microsoft.com/azure/aks/automatic/quick-automatic-private-custom-network)
-- [AKS REST API – Managed Clusters](https://learn.microsoft.com/rest/api/aks/managed-clusters/create-or-update)
+- [Application Gateway for Containers](https://learn.microsoft.com/azure/application-gateway/for-containers/overview)
+- [AGC ALB Controller add-on](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon)
+- [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/)
+- [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress)
+- [AKS REST API - Managed Clusters](https://learn.microsoft.com/rest/api/aks/managed-clusters/create-or-update)
 - [azapi provider](https://registry.terraform.io/providers/azure/azapi/latest/docs)
 - [Node Autoprovisioning](https://learn.microsoft.com/azure/aks/node-autoprovision)
 - [Azure CNI Overlay with Cilium](https://learn.microsoft.com/azure/aks/azure-cni-powered-by-cilium)
 - [Application Routing add-on](https://learn.microsoft.com/azure/aks/app-routing)
-- [AKS egress control](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress)
 - [API Server VNet Integration](https://learn.microsoft.com/azure/aks/api-server-vnet-integration)
+- [Azure Landing Zone Terraform Accelerator](https://aka.ms/alz/acc/tf)
+- [Azure Verified Modules](https://azure.github.io/Azure-Verified-Modules/)
