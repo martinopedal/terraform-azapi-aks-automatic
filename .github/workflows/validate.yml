@@ -40,14 +40,14 @@ jobs:
 
       - name: Check for em/en dashes in code files
         run: |
-          if grep -rn '[–—]' --include='*.tf' --include='*.example' --include='*.md' .; then
+          if grep -rPn '[\x{2013}\x{2014}]' --include='*.tf' --include='*.example' --include='*.md' .; then
             echo "::error::Found em/en dash characters. Use hyphens (-) or rewrite."
             exit 1
           fi
 
       - name: Check for double-dash em-dash approximations
         run: |
-          if grep -rn ' -- ' --include='*.tf' --include='*.example' --include='*.md' .; then
+          if grep -rPn '\s--\s' --include='*.tf' --include='*.example' --include='*.md' .; then
             echo "::error::Found double-dash em-dash approximations. Use colons, periods, or commas."
             exit 1
           fi

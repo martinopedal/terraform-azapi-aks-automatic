@@ -140,6 +140,12 @@ resource "azapi_resource" "aks" {
             enabled = true
           }
         } : null
+        azureKeyVaultKms = var.enable_kms ? {
+          enabled               = true
+          keyId                 = var.kms_key_id
+          keyVaultNetworkAccess = var.kms_key_vault_network_access
+          keyVaultResourceId    = var.kms_key_vault_resource_id
+        } : null
       }
 
       # ----- OIDC issuer --------------------------------------------------------
@@ -167,6 +173,17 @@ resource "azapi_resource" "aks" {
           enabled = var.enable_prometheus
         }
       }
+
+      # ----- Container Insights -------------------------------------------------
+      addonProfiles = var.enable_container_insights ? {
+        omsagent = {
+          enabled = true
+          config = {
+            logAnalyticsWorkspaceResourceID = var.log_analytics_workspace_id
+            useAADAuth                      = true
+          }
+        }
+      } : null
 
       # ----- Cost analysis ------------------------------------------------------
       metricsProfile = var.enable_cost_analysis ? {
@@ -276,6 +293,44 @@ resource "azapi_resource" "aks" {
         var.http_proxy_config.https_proxy != null
       )
       error_message = "http_proxy_config requires at least one of http_proxy or https_proxy to be set."
+    }
+
+    precondition {
+      condition     = !var.enable_container_insights || var.log_analytics_workspace_id != null
+      error_message = "log_analytics_workspace_id is required when enable_container_insights = true."
+    }
+
+    precondition {
+      condition     = !var.enable_kms || var.kms_key_id != null
+      error_message = "kms_key_id is required when enable_kms = true."
+    }
+  }
+}
+
+# =============================================================================
+# Maintenance Window Configuration
+# =============================================================================
+
+resource "azapi_resource" "maintenance_config" {
+  count     = var.maintenance_window != null ? 1 : 0
+  type      = "Microsoft.ContainerService/managedClusters/maintenanceConfigurations@2024-09-01"
+  name      = "default"
+  parent_id = azapi_resource.aks.id
+
+  body = {
+    properties = {
+      maintenanceWindow = {
+        schedule = {
+          weekly = var.maintenance_window.day_of_week != null ? {
+            dayOfWeek     = var.maintenance_window.day_of_week
+            intervalWeeks = var.maintenance_window.interval_weeks
+          } : null
+        }
+        durationHours   = var.maintenance_window.duration_hours
+        startTime       = var.maintenance_window.start_time
+        utcOffset       = var.maintenance_window.utc_offset
+        notAllowedDates = var.maintenance_window.not_allowed_dates
+      }
     }
   }
 }

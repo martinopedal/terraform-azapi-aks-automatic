@@ -346,6 +346,12 @@ variable "enable_prometheus" {
   default     = true
 }
 
+variable "enable_container_insights" {
+  description = "Enable Container Insights for log collection via azureMonitorProfile. Requires log_analytics_workspace_id."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Security
 # =============================================================================
@@ -385,6 +391,26 @@ variable "node_os_upgrade_channel" {
     condition     = contains(["NodeImage", "SecurityPatch", "Unmanaged", "None"], var.node_os_upgrade_channel)
     error_message = "node_os_upgrade_channel must be one of: NodeImage, SecurityPatch, Unmanaged, None."
   }
+}
+
+variable "maintenance_window" {
+  description = <<-EOT
+    Maintenance window configuration for the AKS cluster. Controls when
+    auto-upgrades and node OS updates are applied. Set to null (default)
+    to let AKS choose the maintenance window.
+  EOT
+  type = object({
+    day_of_week    = optional(string, "Wednesday")
+    interval_weeks = optional(number, 1)
+    duration_hours = optional(number, 4)
+    start_time     = optional(string, "03:00")
+    utc_offset     = optional(string, "+00:00")
+    not_allowed_dates = optional(list(object({
+      start = string
+      end   = string
+    })), [])
+  })
+  default = null
 }
 
 # =============================================================================
@@ -433,6 +459,39 @@ variable "enable_purge_protection" {
   description = "Enable purge protection on the Key Vault. When true, the vault cannot be permanently deleted during the soft-delete retention period. This setting is irreversible."
   type        = bool
   default     = true
+}
+
+# =============================================================================
+# Azure Key Vault KMS (etcd encryption)
+# =============================================================================
+
+variable "enable_kms" {
+  description = "Enable Azure Key Vault KMS for customer-managed key encryption of etcd. Requires a Key Vault with a key and appropriate RBAC."
+  type        = bool
+  default     = false
+}
+
+variable "kms_key_id" {
+  description = "Full URI of the Key Vault key to use for KMS etcd encryption (e.g. https://<vault>.vault.azure.net/keys/<key>/<version>). Required when enable_kms = true."
+  type        = string
+  default     = null
+}
+
+variable "kms_key_vault_network_access" {
+  description = "Network access mode for the KMS Key Vault: Private or Public."
+  type        = string
+  default     = "Private"
+
+  validation {
+    condition     = contains(["Private", "Public"], var.kms_key_vault_network_access)
+    error_message = "kms_key_vault_network_access must be Private or Public."
+  }
+}
+
+variable "kms_key_vault_resource_id" {
+  description = "Resource ID of the Key Vault containing the KMS key. Required when enable_kms = true and kms_key_vault_network_access = Private."
+  type        = string
+  default     = null
 }
 
 variable "acr_zone_redundancy_enabled" {

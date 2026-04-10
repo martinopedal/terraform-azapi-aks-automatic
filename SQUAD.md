@@ -16,6 +16,8 @@ Eight extensions in `.github/extensions/` provide domain-specific static analysi
 | `network-architect` | `network_review` | Subnet topology, CIDR, UDR, CNI Overlay, private endpoints |
 | `alz-checker` | `alz_alignment_check` | ALZ Corp policy alignment (public endpoints, tags, diagnostics) |
 | `terraform-engineer` | `terraform_engineering_review` | HCL quality (provider pinning, types, descriptions, patterns) |
+| `gitops-architect` | `gitops_review` | ArgoCD readiness for ALZ Corp private clusters (networking, identity, ingress) |
+| `squad-coordinator` | `squad_dispatch`, `squad_status`, `squad_run_all` | Routes issues to squad tools, roster, full scan orchestration |
 
 ### Local usage (Copilot CLI)
 
@@ -53,6 +55,7 @@ When an issue is opened or labeled, the dispatcher workflow automatically commen
 | `ci-cd` | `terraform_validate_full` |
 | `documentation` | `doc_check` |
 | `enhancement` | `style_check` |
+| `gitops` | `gitops_review` |
 | `squad` (generic) | `style_check` + `doc_check` |
 
 ## Issue Templates

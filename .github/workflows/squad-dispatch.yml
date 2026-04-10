@@ -61,6 +61,11 @@ jobs:
                 tool: 'style_check',
                 description: 'Enforces style rules (emojis, dashes, AI language)',
               },
+              'gitops': {
+                extension: 'gitops-architect',
+                tool: 'gitops_review',
+                description: 'Reviews ArgoCD readiness for ALZ Corp private clusters',
+              },
             };
 
             const matched = [];
