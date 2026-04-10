@@ -51,6 +51,16 @@ jobs:
                 tool: 'terraform_validate_full',
                 description: 'Runs validate + fmt, checks validation and lifecycle coverage',
               },
+              'documentation': {
+                extension: 'doc-checker',
+                tool: 'doc_check',
+                description: 'Cross-references README vs code, checks Learn links',
+              },
+              'enhancement': {
+                extension: 'style-guard',
+                tool: 'style_check',
+                description: 'Enforces style rules (emojis, dashes, AI language)',
+              },
             };
 
             const matched = [];

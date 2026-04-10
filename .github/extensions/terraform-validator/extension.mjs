@@ -31,18 +31,19 @@ function findVariablesWithoutValidation(dir) {
     return ["Could not read variables.tf"];
   }
 
-  const varBlocks = content.match(/variable\s+"[^"]+"\s+\{[^}]*(?:\{[^}]*\}[^}]*)*\}/g) || [];
+  // Split on variable declarations instead of regex to handle nested braces correctly
+  const varSections = content.split(/\n(?=variable\s+")/);
   const missing = [];
 
-  for (const block of varBlocks) {
-    const nameMatch = block.match(/variable\s+"([^"]+)"/);
+  for (const section of varSections) {
+    const nameMatch = section.match(/variable\s+"([^"]+)"/);
     if (!nameMatch) continue;
     const name = nameMatch[1];
 
     // Skip booleans, maps, lists, and objects (validation is less applicable)
-    if (/type\s*=\s*(bool|map|list|object)/.test(block)) continue;
+    if (/type\s*=\s*(bool|map|list|object)/.test(section)) continue;
 
-    if (!block.includes("validation {")) {
+    if (!section.includes("validation {")) {
       missing.push(name);
     }
   }

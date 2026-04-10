@@ -1,0 +1,34 @@
+name: Terraform engineering
+description: Report a Terraform code quality issue, testing gap, or CI/CD improvement.
+labels: ["testing", "squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Recommended squad:**
+        - `terraform-engineer` (`terraform_engineering_review`) for HCL quality and patterns
+        - `terraform-validator` (`terraform_validate_full`) for validation and lifecycle coverage
+        - `style-guard` (`style_check`) for style enforcement
+        - `doc-checker` (`doc_check`) for documentation accuracy
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What code quality, testing, or CI/CD issue needs to be addressed?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Variable validation
+        - Lifecycle or precondition
+        - Provider or state management
+        - Testing (.tftest.hcl)
+        - CI/CD workflow
+        - Documentation accuracy
+        - Style compliance
+        - Other
+    validations:
+      required: true
