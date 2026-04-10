@@ -804,20 +804,9 @@ terraform-azapi-aks-automatic/
 ├── .gitignore
 ├── .github/
 │   ├── copilot-instructions.md
-│   ├── extensions/              # Squad extensions (8 Copilot CLI tools)
-│   │   ├── aks-feature-tracker/
-│   │   ├── alz-checker/
-│   │   ├── doc-checker/
-│   │   ├── network-architect/
-│   │   ├── security-reviewer/
-│   │   ├── style-guard/
-│   │   ├── terraform-engineer/
-│   │   └── terraform-validator/
-│   ├── ISSUE_TEMPLATE/          # Issue templates per squad domain
+│   ├── extensions/              # Squad tools (see SQUAD.md)
+│   ├── ISSUE_TEMPLATE/
 │   └── workflows/
-│       ├── copilot-setup-steps.yml
-│       ├── squad-dispatch.yml
-│       └── validate.yml
 ├── docs/
 │   ├── alz-corp-aks-automatic.drawio
 │   ├── alz-corp-aks-automatic.drawio.png
@@ -836,6 +825,8 @@ terraform-azapi-aks-automatic/
 | `main.tf` | Resource group (azapi) + AKS Automatic cluster (azapi) |
 | `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs, identity principals |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise |
+
+For squad extensions, CI/CD workflows, and issue templates, see [SQUAD.md](SQUAD.md).
 
 ### Why azapi
 
