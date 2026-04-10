@@ -13,8 +13,8 @@ output "cluster_id" {
 }
 
 output "cluster_fqdn" {
-  description = "FQDN of the AKS cluster API server (public)."
-  value       = azapi_resource.aks.output.properties.fqdn
+  description = "FQDN of the AKS cluster API server (public). Null for private clusters with public FQDN disabled."
+  value       = try(azapi_resource.aks.output.properties.fqdn, null)
 }
 
 output "cluster_private_fqdn" {

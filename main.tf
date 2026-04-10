@@ -181,7 +181,7 @@ resource "azapi_resource" "aks" {
       # proxies during node bootstrap.
       httpProxyConfig = var.http_proxy_config != null ? {
         httpProxy  = var.http_proxy_config.http_proxy
-        httpsProxy = var.http_proxy_config.https_proxy
+        httpsProxy = coalesce(var.http_proxy_config.https_proxy, var.http_proxy_config.http_proxy)
         noProxy    = length(var.http_proxy_config.no_proxy) > 0 ? var.http_proxy_config.no_proxy : null
         trustedCa  = var.http_proxy_config.trusted_ca
       } : null
@@ -262,6 +262,20 @@ resource "azapi_resource" "aks" {
     precondition {
       condition     = !var.enable_defender || var.log_analytics_workspace_id != null
       error_message = "log_analytics_workspace_id is required when enable_defender = true."
+    }
+
+    precondition {
+      condition     = var.enable_byo_vnet || (var.external_node_subnet_id == null && var.external_apiserver_subnet_id == null && var.external_pe_subnet_id == null)
+      error_message = "external_*_subnet_id variables cannot be set when enable_byo_vnet = false. External subnets require enable_byo_vnet = true."
+    }
+
+    precondition {
+      condition = (
+        var.http_proxy_config == null ||
+        var.http_proxy_config.http_proxy != null ||
+        var.http_proxy_config.https_proxy != null
+      )
+      error_message = "http_proxy_config requires at least one of http_proxy or https_proxy to be set."
     }
   }
 }

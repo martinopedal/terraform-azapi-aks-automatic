@@ -10,7 +10,7 @@ terraform {
     # All Azure resources are created with azapi.
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 4.2"
+      version = "~> 4.2"
     }
   }
 }

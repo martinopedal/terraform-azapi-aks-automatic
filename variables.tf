@@ -166,9 +166,9 @@ variable "pe_subnet_address_prefix" {
 # =============================================================================
 
 variable "create_acr" {
-  description = "When true, creates a Premium ACR with private endpoint, DNS zone group, and AcrPull role assignment."
+  description = "When true, creates a Premium ACR with private endpoint, DNS zone group, and AcrPull role assignment. Requires a PE subnet (BYO VNet or external)."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "acr_name" {
@@ -177,8 +177,8 @@ variable "acr_name" {
   default     = null
 
   validation {
-    condition     = var.acr_name == null || can(regex("^[a-zA-Z0-9]{5,50}$", var.acr_name))
-    error_message = "acr_name must be 5-50 alphanumeric characters (no hyphens or special characters)."
+    condition     = var.acr_name == null || can(regex("^[a-z0-9]{5,50}$", var.acr_name))
+    error_message = "acr_name must be 5-50 lowercase letters and numbers only (no hyphens or uppercase)."
   }
 }
 
@@ -193,9 +193,9 @@ variable "acr_private_dns_zone_id" {
 }
 
 variable "create_keyvault" {
-  description = "When true, creates a Key Vault with RBAC auth, private endpoint, DNS zone group, and Certificate User role assignment for App Routing TLS."
+  description = "When true, creates a Key Vault with RBAC auth, private endpoint, DNS zone group, and Certificate User role assignment for App Routing TLS. Requires a PE subnet (BYO VNet or external)."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "keyvault_name" {
@@ -308,9 +308,9 @@ variable "enable_service_mesh" {
 # =============================================================================
 
 variable "enable_private_cluster" {
-  description = "When true, the API server is accessible only via the VNet-integrated ILB private IP. Public DNS entries are removed."
+  description = "When true (default for Corp), the API server is accessible only via the VNet-integrated ILB private IP. Public DNS entries are removed."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "private_dns_zone_id" {

@@ -264,7 +264,7 @@ AKS Automatic supports three ingress options, but they do not all use the same A
 > 1. **The AGC AKS add-on is not yet supported on AKS Automatic clusters.** The add-on is available on AKS Standard only. Based on product group signals, support for AKS Automatic is expected in the near future. See [AGC ALB Controller Add-on](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon).
 > 2. **AGC frontends do not support private IP addresses.** Frontends only expose a public FQDN. Based on public signals from the AGC product team, private ingress support is actively in development and is expected in the near future. See [AGC Components - Frontends](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
 >
-> No official timelines or GA dates have been committed for either feature  - plan accordingly and do not take dependencies on unannounced features.
+> No official timelines or GA dates have been committed for either feature. Plan accordingly and do not take dependencies on unannounced features.
 >
 > For ALZ Corp scenarios requiring fully private ingress today, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode**.
 
@@ -327,11 +327,11 @@ Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub
 
 | | AGC | App Routing (NGINX) | Istio Gateway |
 |---|---|---|---|
-| AKS Automatic support | ❌ add-on not yet available | ✅ preconfigured | ✅ opt-in |
+| AKS Automatic support | No add-on not yet available | ✅ preconfigured | ✅ opt-in |
 | Gateway API | ✅ | Ingress API (Gateway API planned) | Istio Gateway CRD (K8s Gateway API planned) |
 | L7 features | WAF, mTLS, rewrites, traffic splits | Host/path routing, TLS | Traffic mgmt, mTLS, fault injection |
-| Private IP frontend | ❌ not yet supported | ✅ internal LB | ✅ internal mode |
-| ALZ Corp recommended | ❌ until add-on + private IP ship | **✅ Primary for Corp** | ✅ Service mesh scenarios |
+| Private IP frontend | No not yet supported | ✅ internal LB | ✅ internal mode |
+| ALZ Corp recommended | No until add-on + private IP ship | **✅ Primary for Corp** | ✅ Service mesh scenarios |
 | Managed by | Azure (AGC resource) | AKS (in-cluster) | AKS (in-cluster) |
 
 ### Egress
@@ -400,11 +400,11 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 
 | | Managed NAT GW | Load Balancer | UDR |
 |---|---|---|---|
-| BYO VNet | ❌ | ✅ | ✅ |
-| Static outbound IP | ❌ | ❌ | Via firewall |
+| BYO VNet | No | ✅ | ✅ |
+| Static outbound IP | No | No | Via firewall |
 | SNAT ports | High (auto) | ~1k per node | Via firewall |
-| Centralised filtering | ❌ | ❌ | ✅ |
-| ALZ Corp suitable | ❌ | ❌ | ✅ |
+| Centralised filtering | No | No | ✅ |
+| ALZ Corp suitable | No | No | ✅ |
 | Terraform setting | `enable_byo_vnet = false` | `egress_type = "loadBalancer"` | `egress_type = "userDefinedRouting"` |
 
 ### Security
@@ -431,7 +431,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Component | Default State | Configurable |
 |---|---|---|
 | Managed Prometheus | Enabled (CLI/Portal) | Yes - `enable_prometheus` |
-| Container Insights | Enabled (CLI/Portal) | Yes |
+| Container Insights | Enabled (CLI/Portal) | Not wired in this module; configure via CLI or portal |
 | Azure Monitor Dashboards | Built-in via portal | Yes - link Managed Grafana |
 | ACNS network observability | Not enabled | Yes - `advancedNetworking` (not yet wired in this module) |
 | Cost analysis | Not enabled | Yes - `enable_cost_analysis` |
@@ -571,7 +571,7 @@ The module applies secure defaults that can be overridden when needed:
 
 ## BYO VNet Topology
 
-This section shows the target ALZ Corp topology. The module currently implements the node and API server subnets. Add the AGC and private-endpoint subnets when deploying AGC or PaaS services that use private endpoints.
+This section shows the target ALZ Corp topology. The module implements the node subnet, API server subnet, and private endpoint subnet (when `create_acr` or `create_keyvault` is true in standalone mode). The AGC subnet is not created by this module.
 
 ```
 Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
@@ -660,11 +660,13 @@ The `privateDNSZone` property (ARM) / `--private-dns-zone` flag (CLI) controls z
 
 **Implementation guidance for ALZ hub-spoke:**
 
-- Use `privateDNSZone = "<resource-id>"` pointing to a pre-created `private.<region>.azmk8s.io` zone in the connectivity subscription. The zone must be linked to both hub and spoke VNets.
+> **Module limitation:** This module uses a SystemAssigned managed identity. Custom private DNS zone resource IDs [require a UserAssigned managed identity](https://learn.microsoft.com/azure/aks/private-clusters#configure-a-private-dns-zone). To use a shared ALZ `private.<region>.azmk8s.io` zone from the connectivity subscription, extend the `identity` block in `main.tf` to UserAssigned and relax the corresponding precondition. Until then, use `private_dns_zone_id = null` (default, system-managed zone) or `private_dns_zone_id = "none"`.
+
+- The recommended ALZ pattern uses `privateDNSZone = "<resource-id>"` pointing to a pre-created `private.<region>.azmk8s.io` zone in the connectivity subscription. The zone must be linked to both hub and spoke VNets. This requires extending this module to UserAssigned identity.
 - The cluster managed identity requires `Private DNS Zone Contributor` and `Network Contributor` on the zone.
 - On-premises DNS servers need a conditional forwarder for `private.<region>.azmk8s.io` to Azure DNS (`168.63.129.16`) via the hub.
 - For public VNet-integrated clusters: no Private DNS Zone is needed. Restrict external access using `authorized_ip_ranges`.
-- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `Private DNS Zone Contributor` on private zones and `DNS Zone Contributor` on public zones.
+- For Application Routing DNS: pass pre-existing zone resource IDs via `dns_zone_resource_ids`. The AKS managed identity requires `Private DNS Zone Contributor` on private zones and `DNS Zone Contributor` on public zones. These role assignments are not created by this module and must be managed externally.
 - For AGC frontends: add a CNAME in the appropriate Private DNS Zone pointing to the generated `*.appgw.azure.com` FQDN.
 
 **Sources:**
@@ -735,7 +737,7 @@ The cluster's SystemAssigned managed identity requires the following role assign
 
 | Role | Scope | Purpose |
 |---|---|---|
-| `Network Contributor` | BYO VNet and subnets | Node provisioning, subnet joins |
+| `Network Contributor` | BYO VNet and subnets | Node provisioning, subnet joins. Created by this module in standalone mode; must be granted externally in vending mode. |
 | `Private DNS Zone Contributor` | Private DNS zones in connectivity subscription | Application Routing private DNS record management |
 | `DNS Zone Contributor` | Public DNS zones | Application Routing public DNS record management |
 | `Key Vault Certificate User` | Key Vault(s) for TLS certs | Application Routing TLS certificate retrieval |
@@ -755,15 +757,15 @@ When `enable_cost_analysis = true`, the module enables [AKS cost analysis](https
 
 If the ALZ platform uses the [AVM Subscription Vending module](https://github.com/Azure/bicep-registry-modules/tree/main/avm/ptn/lz/sub-vending) to provision application landing zone subscriptions, and the network team has customised it with [Azure Virtual Network Manager (AVNM) IPAM](https://learn.microsoft.com/azure/virtual-network-manager/concept-ip-address-management) for centralised IP address allocation, the following considerations change compared to the default BYO VNet path documented above.
 
-**VNet and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, and UDR as part of the landing zone provisioning  - before this AKS module runs. In this mode, keep `enable_byo_vnet = true` and pass the pre-existing subnet resource IDs via `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id` as needed. When external subnet IDs are supplied, `network.tf` is skipped automatically.
+**VNet and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, and UDR as part of the landing zone provisioning, before this AKS module runs. In this mode, keep `enable_byo_vnet = true` and pass the pre-existing subnet resource IDs via `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id` as needed. When external subnet IDs are supplied, `network.tf` is skipped automatically.
 
-**CIDR ranges are allocated from AVNM IPAM pools, not manually.** The `vnet_address_space`, `node_subnet_address_prefix`, and `apiserver_subnet_address_prefix` variables become irrelevant  - the vending pipeline controls these via IPAM pool reservations. The overlay CIDRs (`pod_cidr`, `service_cidr`) are not part of the VNet address space (they exist in the overlay) but still must not overlap with any routable address space in the IPAM plan. Coordinate these with the network team.
+**CIDR ranges are allocated from AVNM IPAM pools, not manually.** The `vnet_address_space`, `node_subnet_address_prefix`, and `apiserver_subnet_address_prefix` variables become irrelevant. The vending pipeline controls these via IPAM pool reservations. The overlay CIDRs (`pod_cidr`, `service_cidr`) are not part of the VNet address space (they exist in the overlay) but still must not overlap with any routable address space in the IPAM plan. Coordinate these with the network team.
 
 **Subnet delegations must be configured in the vending pipeline.** The API server subnet requires delegation to `Microsoft.ContainerService/managedClusters` and the AGC subnet requires delegation to `Microsoft.ServiceNetworking/trafficControllers`. These delegations must be part of the vending module's subnet definitions, not applied by this module after the fact.
 
 **Peering and route tables are handled by the vending pipeline.** The subscription vending module typically creates hub-spoke peering and attaches the UDR (pointing to the hub firewall) to the node subnet as part of provisioning. The NSG and route table resources in `network.tf` are not needed.
 
-**Terraform state boundaries.** The vending module uses `azurerm` (AVM convention). This module uses `azapi`. They operate in separate Terraform states. Pass subnet IDs as input variables  - do not use `data` source lookups across states, as that creates implicit dependencies that break when the vending pipeline runs independently.
+**Terraform state boundaries.** The vending module uses `azurerm` (AVM convention). This module uses `azapi`. They operate in separate Terraform states. Pass subnet IDs as input variables. Do not use `data` source lookups across states, as that creates implicit dependencies that break when the vending pipeline runs independently.
 
 **Summary of what changes:**
 
@@ -789,6 +791,7 @@ aks-automatic-azapi/
 ├── locals.tf                 # Computed values, conditional logic
 ├── variables.tf              # All input variables
 ├── network.tf                # BYO VNet resources (conditional)
+├── dependencies.tf           # ACR, Key Vault, PEs, RBAC
 ├── main.tf                   # Resource group + AKS cluster
 ├── outputs.tf                # Outputs
 ├── terraform.tfvars.example  # Example values for common scenarios
@@ -806,8 +809,9 @@ aks-automatic-azapi/
 | `locals.tf` | Derived values: network conditionals, subnet IDs, outbound type |
 | `variables.tf` | All configurable inputs with descriptions, types, defaults, validations |
 | `network.tf` | All BYO VNet resources, conditionally created when `enable_byo_vnet = true` |
+| `dependencies.tf` | ACR, Key Vault, Private Endpoints, DNS Zone Groups, RBAC role assignments |
 | `main.tf` | Resource group (azapi) + AKS Automatic cluster (azapi) |
-| `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs |
+| `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs, identity principals |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise |
 
 ### Why azapi
@@ -913,7 +917,7 @@ kubectl get nodes
 
 ## Usage Example
 
-The following shows the core `main.tf` AKS Automatic resource as deployed by this module. This is the actual azapi resource body  - not a simplified example.
+The following shows the core `main.tf` AKS Automatic resource as deployed by this module. This is the actual azapi resource body. This is a simplified subset; see main.tf for the full implementation including Istio, Defender, HTTP proxy, and cost analysis.
 
 ```hcl
 resource "azapi_resource" "aks" {
@@ -1030,7 +1034,7 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** (open-source). This i
 | Audit trails and forensics | Limited | ✅ |
 | Multi-cluster mesh | Not available | ✅ |
 | Commercial SLA | Azure support | Azure + Isovalent support |
-| Windows node support | ❌ | ❌ (roadmap) |
+| Windows node support | No | No (roadmap) |
 | Upgrade from OSS | N/A | One-click via Marketplace |
 
 **When to consider Cilium Enterprise:**
@@ -1047,7 +1051,7 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** (open-source). This i
 
 ### Karpenter NodePool and AKSNodeClass Configuration
 
-After cluster deployment, customise node provisioning behaviour by creating Karpenter CRDs. These are not managed by Terraform  - they are Kubernetes-native resources applied via `kubectl`.
+After cluster deployment, customise node provisioning behaviour by creating Karpenter CRDs. These are not managed by Terraform. They are Kubernetes-native resources applied via `kubectl`.
 
 ```yaml
 # Example: GPU-optimised NodePool for AI/ML workloads
@@ -1124,7 +1128,7 @@ AKS Automatic does not provide built-in backup. Consider:
 
 - **Azure Backup for AKS** (managed offering) for scheduled backup of cluster resources and persistent volumes
 - **Velero** (open-source) with Azure Blob Storage as the backup target, using Workload Identity for auth
-- **GitOps** (Flux/ArgoCD) for declarative cluster state recovery  - workload manifests are redeployable from Git
+- **GitOps** (Flux/ArgoCD) for declarative cluster state recovery. Workload manifests are redeployable from Git
 - Persistent volume snapshots via the Disk CSI Snapshot Controller (enabled by default)
 - For multi-region DR: deploy a second AKS Automatic cluster in a paired region. Use Azure Front Door or Traffic Manager for failover. Container images should be replicated via ACR geo-replication.
 
@@ -1323,9 +1327,9 @@ The table below covers AKS Automatic and all its dependencies referenced in this
 | **Azure CNI Overlay + Cilium** | ✅ | ✅ | GA | Preconfigured in Automatic |
 | **Node Autoprovisioning (NAP/Karpenter)** | ✅ | ✅ | GA | Preconfigured in Automatic |
 | **Application Routing add-on (NGINX)** | ✅ | ✅ | GA | Preconfigured in Automatic |
-| **Application Gateway for Containers** | ✅ | ❌ | GA (limited regions) | [AGC region list](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions) includes Norway East but not Sweden Central |
-| **AGC AKS add-on on Automatic** | ❌ | ❌ | Not yet supported | Add-on not available on AKS Automatic clusters |
-| **AGC private IP frontend** | ❌ | ❌ | Not yet supported | Public FQDN only. Private IP in development |
+| **Application Gateway for Containers** | ✅ | No | GA (limited regions) | [AGC region list](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions) includes Norway East but not Sweden Central |
+| **AGC AKS add-on on Automatic** | No | No | Not yet supported | Add-on not available on AKS Automatic clusters |
+| **AGC private IP frontend** | No | No | Not yet supported | Public FQDN only. Private IP in development |
 | **Istio service mesh add-on** | ✅ | ✅ | GA | Available in all AKS regions |
 | **Managed Prometheus (Azure Monitor workspace)** | ✅ | ✅ | GA | [Workspace regions](https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-metrics-overview) include both |
 | **Container Insights** | ✅ | ✅ | GA | |
