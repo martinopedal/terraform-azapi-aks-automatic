@@ -32,7 +32,7 @@
   - [azapi vs AVM Compatibility](#azapi-vs-avm-compatibility)
   - [RBAC and Identity Requirements](#rbac-and-identity-requirements)
   - [Monitoring Integration](#monitoring-integration)
-- [Terraform Project Structure](#terraform-project-structure)
+- [Terraform Module Structure](#terraform-module-structure)
 - [Deployment Scenarios](#deployment-scenarios)
 - [Regional Availability and Limitations](#regional-availability-and-limitations)
 - [References](#references)
@@ -784,7 +784,7 @@ If the ALZ platform uses the [AVM Subscription Vending module](https://github.co
 
 ---
 
-## Terraform Project Structure
+## Terraform Module Structure
 
 ```
 terraform-azapi-aks-automatic/
@@ -796,22 +796,7 @@ terraform-azapi-aks-automatic/
 ├── dependencies.tf           # ACR, Key Vault, PEs, RBAC
 ├── main.tf                   # Resource group + AKS cluster
 ├── outputs.tf                # Outputs
-├── terraform.tfvars.example  # Example values for common scenarios
-├── AGENTS.md                 # AI agent instructions
-├── CONTRIBUTING.md           # Contribution guidelines
-├── LICENSE                   # License
-├── SECURITY.md               # Security policy
-├── .gitignore
-├── .github/
-│   ├── copilot-instructions.md
-│   ├── extensions/              # Squad tools (see SQUAD.md)
-│   ├── ISSUE_TEMPLATE/
-│   └── workflows/
-├── docs/
-│   ├── alz-corp-aks-automatic.drawio
-│   ├── alz-corp-aks-automatic.drawio.png
-│   └── alz-corp-aks-automatic.drawio.svg
-└── README.md
+└── terraform.tfvars.example  # Example values for common scenarios
 ```
 
 | File | Responsibility |
@@ -825,8 +810,6 @@ terraform-azapi-aks-automatic/
 | `main.tf` | Resource group (azapi) + AKS Automatic cluster (azapi) |
 | `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs, identity principals |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise |
-
-For squad extensions, CI/CD workflows, and issue templates, see [SQUAD.md](SQUAD.md).
 
 ### Why azapi
 
