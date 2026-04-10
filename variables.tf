@@ -346,6 +346,12 @@ variable "enable_prometheus" {
   default     = true
 }
 
+variable "enable_container_insights" {
+  description = "Enable Container Insights for log collection via azureMonitorProfile. Requires log_analytics_workspace_id."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Security
 # =============================================================================
@@ -433,6 +439,39 @@ variable "enable_purge_protection" {
   description = "Enable purge protection on the Key Vault. When true, the vault cannot be permanently deleted during the soft-delete retention period. This setting is irreversible."
   type        = bool
   default     = true
+}
+
+# =============================================================================
+# Azure Key Vault KMS (etcd encryption)
+# =============================================================================
+
+variable "enable_kms" {
+  description = "Enable Azure Key Vault KMS for customer-managed key encryption of etcd. Requires a Key Vault with a key and appropriate RBAC."
+  type        = bool
+  default     = false
+}
+
+variable "kms_key_id" {
+  description = "Full URI of the Key Vault key to use for KMS etcd encryption (e.g. https://<vault>.vault.azure.net/keys/<key>/<version>). Required when enable_kms = true."
+  type        = string
+  default     = null
+}
+
+variable "kms_key_vault_network_access" {
+  description = "Network access mode for the KMS Key Vault: Private or Public."
+  type        = string
+  default     = "Private"
+
+  validation {
+    condition     = contains(["Private", "Public"], var.kms_key_vault_network_access)
+    error_message = "kms_key_vault_network_access must be Private or Public."
+  }
+}
+
+variable "kms_key_vault_resource_id" {
+  description = "Resource ID of the Key Vault containing the KMS key. Required when enable_kms = true and kms_key_vault_network_access = Private."
+  type        = string
+  default     = null
 }
 
 variable "acr_zone_redundancy_enabled" {
