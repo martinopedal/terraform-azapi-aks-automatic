@@ -82,6 +82,11 @@ resource "azapi_resource" "aks" {
         podCidr           = var.pod_cidr
         serviceCidr       = var.service_cidr
         dnsServiceIP      = var.dns_service_ip
+        advancedNetworking = var.enable_acns ? {
+          observability = {
+            enabled = true
+          }
+        } : null
       }
 
       # ----- API server access --------------------------------------------------

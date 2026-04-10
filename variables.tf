@@ -308,6 +308,12 @@ variable "enable_service_mesh" {
   default     = false
 }
 
+variable "enable_acns" {
+  description = "Enable Advanced Container Networking Services (ACNS). Provides container network observability, FQDN-based network policies, and multi-network support. Paid add-on."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Private Cluster
 # =============================================================================
