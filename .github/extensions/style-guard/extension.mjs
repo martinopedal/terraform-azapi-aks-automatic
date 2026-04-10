@@ -32,6 +32,7 @@ function scanFile(filePath) {
     if (DOUBLE_DASH.test(line)) issues.push(`${filePath}:${lineNum}: double-dash em-dash approximation found`);
     if (BULLET_CHAR.test(line)) issues.push(`${filePath}:${lineNum}: bullet character found (use - instead)`);
     if (GEQ_CHAR.test(line)) issues.push(`${filePath}:${lineNum}: non-ASCII >= character found`);
+    if (FORBIDDEN_EMOJIS.test(line)) issues.push(`${filePath}:${lineNum}: non-allowed emoji found`);
     if (AI_WORDS.test(line)) {
       const match = line.match(AI_WORDS);
       issues.push(`${filePath}:${lineNum}: AI language found: ${match.join(", ")}`);

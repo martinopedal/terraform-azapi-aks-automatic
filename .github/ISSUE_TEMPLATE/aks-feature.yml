@@ -1,0 +1,35 @@
+name: AKS feature request
+description: Request support for a new or updated AKS Automatic feature.
+labels: ["feature-tracking", "squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Recommended squad:** `aks-feature-tracker` (`aks_feature_scan`)
+        Scans AKS Automatic ARM API features with GA status and regional availability.
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature description
+      description: What AKS Automatic feature should be added or updated?
+    validations:
+      required: true
+  - type: input
+    id: arm_path
+    attributes:
+      label: ARM property path
+      description: The ARM API property path if known (e.g. securityProfile.azureKeyVaultKms).
+  - type: input
+    id: learn_link
+    attributes:
+      label: Microsoft Learn link
+      description: Link to the official documentation for this feature.
+  - type: dropdown
+    id: ga_status
+    attributes:
+      label: GA status
+      options:
+        - GA
+        - Public Preview
+        - Private Preview
+        - Unknown

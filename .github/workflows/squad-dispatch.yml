@@ -1,0 +1,111 @@
+name: "Squad Dispatcher"
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  dispatch:
+    name: Route to squad
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign squad tools based on labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map(l => l.name);
+
+            // Map labels to squad extensions and recommended tools
+            const squadMap = {
+              'security': {
+                extension: 'security-reviewer',
+                tool: 'security_scan',
+                description: 'Scans Azure Security Benchmark controls (KV, ACR, AKS hardening)',
+              },
+              'networking': {
+                extension: 'network-architect',
+                tool: 'network_review',
+                description: 'Reviews subnet topology, CIDR, UDR, CNI, private endpoints',
+              },
+              'alz': {
+                extension: 'alz-checker',
+                tool: 'alz_alignment_check',
+                description: 'Validates ALZ Corp policy alignment',
+              },
+              'testing': {
+                extension: 'terraform-engineer',
+                tool: 'terraform_engineering_review',
+                description: 'Reviews HCL quality, provider pinning, patterns',
+              },
+              'feature-tracking': {
+                extension: 'aks-feature-tracker',
+                tool: 'aks_feature_scan',
+                description: 'Scans AKS Automatic ARM API features with GA status and regional availability',
+              },
+              'ci-cd': {
+                extension: 'terraform-validator',
+                tool: 'terraform_validate_full',
+                description: 'Runs validate + fmt, checks validation and lifecycle coverage',
+              },
+              'documentation': {
+                extension: 'doc-checker',
+                tool: 'doc_check',
+                description: 'Cross-references README vs code, checks Learn links',
+              },
+              'enhancement': {
+                extension: 'style-guard',
+                tool: 'style_check',
+                description: 'Enforces style rules (emojis, dashes, AI language)',
+              },
+            };
+
+            const matched = [];
+            for (const label of labels) {
+              if (squadMap[label]) {
+                matched.push(squadMap[label]);
+              }
+            }
+
+            if (matched.length === 0 && labels.includes('squad')) {
+              // Generic squad issue, suggest all tools
+              matched.push({
+                extension: 'style-guard',
+                tool: 'style_check',
+                description: 'Enforces style rules (emojis, dashes, AI language)',
+              });
+              matched.push({
+                extension: 'doc-checker',
+                tool: 'doc_check',
+                description: 'Cross-references README vs code, checks Learn links',
+              });
+            }
+
+            if (matched.length === 0) return;
+
+            const lines = [
+              '## Squad Assignment',
+              '',
+              'Based on labels, the following squad tools are recommended for this issue:',
+              '',
+              '| Extension | Tool | Purpose |',
+              '|---|---|---|',
+            ];
+
+            for (const m of matched) {
+              lines.push(`| \`${m.extension}\` | \`${m.tool}\` | ${m.description} |`);
+            }
+
+            lines.push('');
+            lines.push('To use these tools, open the repo in Copilot CLI and call the tool by name.');
+            lines.push('To assign Copilot coding agent, use the "Copilot" button on this issue.');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: lines.join('\n'),
+            });

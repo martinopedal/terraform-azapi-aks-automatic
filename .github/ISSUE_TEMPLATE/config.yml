@@ -1,0 +1,5 @@
+blank_issues: false
+contact_links:
+  - name: Squad tools reference
+    url: https://github.com/martinopedal/terraform-azapi-aks-automatic/blob/main/AGENTS.md#squad-extensions
+    about: See AGENTS.md for the full list of squad tools and their purposes.

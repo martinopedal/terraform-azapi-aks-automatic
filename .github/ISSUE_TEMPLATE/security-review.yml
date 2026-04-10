@@ -1,0 +1,32 @@
+name: Security review
+description: Request a security review or report a security hardening gap.
+labels: ["security", "squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Recommended squad:** `security-reviewer` (`security_scan`)
+        Checks Azure Security Benchmark controls for Key Vault, ACR, and AKS hardening.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What security concern or hardening gap needs to be addressed?
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Link to Azure Security Benchmark, CIS control, or Learn documentation.

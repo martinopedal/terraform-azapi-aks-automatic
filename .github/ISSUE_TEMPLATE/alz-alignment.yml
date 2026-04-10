@@ -1,0 +1,21 @@
+name: ALZ alignment
+description: Report an Azure Landing Zone policy conflict or governance gap.
+labels: ["alz", "squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Recommended squad:** `alz-checker` (`alz_alignment_check`)
+        Validates ALZ Corp policy alignment including public endpoint denial, diagnostic settings, and tagging.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What ALZ policy conflict or governance gap was found?
+    validations:
+      required: true
+  - type: textarea
+    id: policy
+    attributes:
+      label: Policy name or ID
+      description: The Azure Policy name, assignment ID, or management group scope if known.

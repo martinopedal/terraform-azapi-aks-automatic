@@ -1,0 +1,30 @@
+name: Networking change
+description: Request a networking topology change, CIDR update, or connectivity fix.
+labels: ["networking", "squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Recommended squad:** `network-architect` (`network_review`)
+        Reviews subnet topology, CIDR allocations, UDR, CNI, DNS, and private endpoints.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What networking change is needed?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Networking area
+      options:
+        - Subnet sizing or CIDR
+        - NSG or UDR
+        - Private endpoints or DNS
+        - HTTP proxy
+        - Egress configuration
+        - Peering or connectivity
+        - Other
+    validations:
+      required: true
