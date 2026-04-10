@@ -30,7 +30,8 @@ resource "azapi_resource" "pe_subnet" {
 
   body = {
     properties = {
-      addressPrefix = var.pe_subnet_address_prefix
+      addressPrefix                  = var.pe_subnet_address_prefix
+      privateEndpointNetworkPolicies = "Disabled"
     }
   }
 
@@ -265,9 +266,8 @@ resource "azapi_resource" "role_kv_cert_user" {
 
 # Network Contributor on the module-created spoke VNet. NAP provisions nodes in BYO subnets.
 # In vending mode, this assignment is granted by the vending pipeline on the
-# pre-provisioned subnets instead of by this module. The SystemAssigned identity
-# dependency is resolved by Terraform because the AKS cluster and VNet are in the
-# same state.
+# pre-provisioned subnets instead of by this module. Handles both SystemAssigned
+# and UserAssigned identity paths.
 resource "azapi_resource" "role_network_contributor" {
   count     = local.create_network ? 1 : 0
   type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
@@ -277,7 +277,7 @@ resource "azapi_resource" "role_network_contributor" {
   body = {
     properties = {
       roleDefinitionId = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/4d97b98b-1d4f-4787-a291-c67834d212e7"
-      principalId      = azapi_resource.aks.identity[0].principal_id
+      principalId      = local.use_user_assigned_identity ? try(azapi_resource.aks.output.identity.userAssignedIdentities[var.user_assigned_identity_id].principalId, null) : azapi_resource.aks.identity[0].principal_id
       principalType    = "ServicePrincipal"
     }
   }
