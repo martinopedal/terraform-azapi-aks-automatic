@@ -1,0 +1,51 @@
+# Entra ID OIDC SSO configuration for ArgoCD.
+#
+# Prerequisites:
+#   1. Create an Entra ID App Registration:
+#      az ad app create --display-name "ArgoCD SSO" \
+#        --web-redirect-uris "https://argocd.<private-dns-zone>/auth/callback"
+#   2. Create a client secret and note the Application (client) ID
+#   3. Store the client secret in Key Vault:
+#      az keyvault secret set --vault-name <vault> \
+#        --name argocd-sso-client-secret --value <secret>
+#   4. Use Workload Identity + External Secrets Operator to sync
+#      the secret to Kubernetes, or patch it manually below.
+#
+# Replace placeholders:
+#   <TENANT_ID>   - Your Entra ID tenant ID
+#   <CLIENT_ID>   - App registration client ID
+#   <ARGOCD_FQDN> - ArgoCD UI hostname (e.g. argocd.corp.contoso.com)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+data:
+  # OIDC configuration for Entra ID
+  oidc.config: |
+    name: "Entra ID"
+    issuer: "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
+    clientID: "<CLIENT_ID>"
+    clientSecret: "$oidc.entra.clientSecret"
+    requestedScopes:
+      - openid
+      - profile
+      - email
+    requestedIDTokenClaims:
+      groups:
+        essential: true
+
+  # URL must match the Ingress host
+  url: "https://<ARGOCD_FQDN>"
+
+  # Leave admin enabled as a break-glass mechanism until SSO is verified.
+  # Once SSO is confirmed working, disable with:
+  #   kubectl patch configmap argocd-cm -n argocd --type merge \
+  #     -p '{"data":{"admin.enabled":"false"}}'
+  admin.enabled: "true"
+
+  # Status badge (optional, useful for GitOps repo README)
+  statusbadge.enabled: "true"

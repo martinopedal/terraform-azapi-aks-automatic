@@ -1,0 +1,42 @@
+# ArgoCD RBAC configuration mapped to Entra ID groups.
+#
+# AKS Automatic enforces Azure RBAC for Kubernetes (local accounts disabled).
+# ArgoCD itself has its own RBAC layer (argocd-rbac-cm). Map Entra ID groups
+# to ArgoCD roles so that Kubernetes RBAC and ArgoCD RBAC are both satisfied.
+#
+# Replace placeholders:
+#   <PLATFORM_TEAM_GROUP_ID> - Entra ID group ObjectId for platform admins
+#   <DEV_TEAM_GROUP_ID>      - Entra ID group ObjectId for developers
+#
+# Also create Azure RBAC bindings for the ArgoCD service accounts:
+#   az role assignment create \
+#     --role "Azure Kubernetes Service RBAC Writer" \
+#     --assignee-object-id <argocd-application-controller-sa-object-id> \
+#     --scope <aks-cluster-resource-id>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+data:
+  # Default policy: read-only for authenticated users
+  policy.default: role:readonly
+
+  # Map Entra ID groups to ArgoCD roles
+  policy.csv: |
+    # Platform team: full admin
+    g, <PLATFORM_TEAM_GROUP_ID>, role:admin
+
+    # Dev team: can sync and view dev/staging apps only (not prod)
+    p, role:developer, applications, get, dev-*/*, allow
+    p, role:developer, applications, sync, dev-*/*, allow
+    p, role:developer, applications, get, staging-*/*, allow
+    p, role:developer, applications, sync, staging-*/*, allow
+    p, role:developer, logs, get, */*, allow
+    g, <DEV_TEAM_GROUP_ID>, role:developer
+
+  # Use Entra ID groups claim for RBAC
+  scopes: "[groups]"

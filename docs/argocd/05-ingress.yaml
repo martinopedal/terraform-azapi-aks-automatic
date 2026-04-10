@@ -1,0 +1,61 @@
+# ArgoCD UI Ingress via Application Routing with internal LB.
+#
+# AKS Automatic preconfigures Application Routing. This setup:
+#   1. Creates an internal NginxIngressController (no public IP)
+#   2. TLS terminated at the Ingress using a Key Vault certificate
+#   3. Re-encrypts to ArgoCD server backend (HTTPS)
+#
+# Prerequisites:
+#   1. TLS certificate uploaded to Key Vault:
+#      az keyvault certificate import --vault-name <vault> \
+#        --name argocd-tls --file argocd-cert.pfx
+#   2. AKS managed identity has "Key Vault Certificate User" on the vault
+#      (this RBAC is created by dependencies.tf when create_keyvault = true)
+#   3. Private DNS record for <ARGOCD_FQDN> pointing to the internal LB IP
+#      (create in the ALZ connectivity subscription private DNS zone)
+#
+# Replace placeholders:
+#   <ARGOCD_FQDN>  - ArgoCD UI hostname (e.g. argocd.corp.contoso.com)
+#   <KV_CERT_URI>  - Key Vault base URI (terraform output keyvault_uri, strip trailing slash)
+#                    Full annotation value: <KV_CERT_URI>/certificates/argocd-tls
+---
+# Internal NginxIngressController - forces Application Routing to use
+# an internal Azure Load Balancer (no public IP). Required for ALZ Corp.
+apiVersion: approuting.kubernetes.azure.com/v1alpha1
+kind: NginxIngressController
+metadata:
+  name: nginx-internal
+  namespace: app-routing-system
+spec:
+  ingressClassName: nginx-internal
+  controllerNamePrefix: nginx-internal
+  loadBalancerAnnotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    # TLS termination at Ingress, re-encrypt to backend
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    # TLS certificate from Azure Key Vault
+    kubernetes.azure.com/tls-cert-keyvault-uri: "<KV_CERT_URI>/certificates/argocd-tls"
+spec:
+  ingressClassName: nginx-internal
+  rules:
+    - host: "<ARGOCD_FQDN>"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 443
+  tls:
+    - hosts:
+        - "<ARGOCD_FQDN>"
+      secretName: argocd-tls

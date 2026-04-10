@@ -1,0 +1,58 @@
+# ArgoCD ApplicationSet for multi-environment GitOps.
+#
+# Uses the Git generator with directory structure:
+#   clusters/
+#     dev/apps/<app>/
+#     staging/apps/<app>/
+#     prod/apps/<app>/
+#
+# Each directory becomes an ArgoCD Application targeting the
+# corresponding namespace. The ApplicationSet controller creates
+# and manages Applications automatically.
+#
+# Replace placeholders:
+#   <GIT_REPO_URL> - Your GitOps repository URL
+#   <ACR_SERVER>   - ACR login server from terraform output
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cluster-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: "<GIT_REPO_URL>"
+        revision: main
+        directories:
+          - path: "clusters/*/apps/*"
+  template:
+    metadata:
+      # Name: <env>-<app> (e.g. dev-frontend, prod-backend)
+      name: "{{ index .path.segments 1 }}-{{ index .path.segments 3 }}"
+      namespace: argocd
+    spec:
+      project: default
+      source:
+        repoURL: "<GIT_REPO_URL>"
+        targetRevision: main
+        path: "{{ .path.path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        # Deploy to namespace matching the app name
+        namespace: "{{ index .path.segments 3 }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
