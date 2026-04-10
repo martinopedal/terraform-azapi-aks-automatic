@@ -1,5 +1,19 @@
 # Copilot Instructions - AKS Automatic (azapi)
 
+## Git workflow
+
+Always start on `main` and pull latest before doing any work:
+
+```bash
+git checkout main && git pull origin main
+```
+
+Stay on `main` until you need to make changes. When making changes:
+1. Pull latest main first: `git checkout main && git pull origin main`
+2. Create a feature branch: `git checkout -b <branch-name>`
+3. Make changes, commit, push, and create a PR
+4. Do not switch back to main until the PR is merged or the work is done
+
 ## What this repo is
 
 A Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resources. The azurerm provider is present only for the `data.azurerm_client_config` data source.
