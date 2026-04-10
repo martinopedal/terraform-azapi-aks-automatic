@@ -1,0 +1,81 @@
+name: "AKS Feature Monitor"
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    name: Scan AKS Features
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run AKS Feature Scan
+        id: scan
+        run: |
+          node .github/extensions/aks-feature-tracker/extension.mjs > scan-output.json 2>&1 || true
+          cat scan-output.json
+
+      - name: Compare Against Baseline
+        id: compare
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let baseline;
+            try {
+              baseline = JSON.parse(fs.readFileSync('docs/aks-feature-baseline.json', 'utf8'));
+            } catch (e) {
+              core.setFailed('Failed to read baseline file: ' + e.message);
+              return;
+            }
+
+            let scan;
+            try {
+              scan = JSON.parse(fs.readFileSync('scan-output.json', 'utf8'));
+            } catch (e) {
+              core.info('Scan output is not valid JSON, skipping comparison.');
+              core.setOutput('changed', 'false');
+              return;
+            }
+
+            const changes = [];
+            for (const key of ['implemented', 'preconfigured', 'not_wired']) {
+              if (scan[key] !== undefined && scan[key] !== baseline[key]) {
+                changes.push(`- **${key}**: ${baseline[key]} -> ${scan[key]}`);
+              }
+            }
+
+            if (changes.length > 0) {
+              core.setOutput('changed', 'true');
+              core.setOutput('changes', changes.join('\n'));
+            } else {
+              core.setOutput('changed', 'false');
+            }
+
+      - name: Create Issue for Changes
+        if: steps.compare.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const changes = `${{ steps.compare.outputs.changes }}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'AKS Feature Scan: changes detected',
+              body: `The weekly AKS feature scan detected changes from the baseline:\n\n${changes}\n\nPlease review and update \`docs/aks-feature-baseline.json\` if appropriate.`,
+              labels: ['aks-features']
+            });
