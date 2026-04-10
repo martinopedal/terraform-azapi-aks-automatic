@@ -57,6 +57,7 @@ resource "azapi_resource" "acr" {
       adminUserEnabled         = false
       publicNetworkAccess      = "Disabled"
       networkRuleBypassOptions = "AzureServices"
+      zoneRedundancy           = var.acr_zone_redundancy_enabled ? "Enabled" : "Disabled"
     }
   }
 
@@ -64,6 +65,10 @@ resource "azapi_resource" "acr" {
     precondition {
       condition     = local.pe_subnet_id != null
       error_message = "ACR is configured with public access disabled but no PE subnet is available. Set external_pe_subnet_id (vending mode) or enable BYO VNet (standalone mode) to provide a subnet for the private endpoint."
+    }
+    precondition {
+      condition     = var.acr_name != null
+      error_message = "acr_name is required when create_acr = true."
     }
   }
 }
@@ -139,6 +144,7 @@ resource "azapi_resource" "keyvault" {
       sku                       = { family = "A", name = "standard" }
       enableRbacAuthorization   = true
       enableSoftDelete          = true
+      enablePurgeProtection     = var.enable_purge_protection
       softDeleteRetentionInDays = 90
       publicNetworkAccess       = "Disabled"
       networkAcls = {
@@ -152,6 +158,10 @@ resource "azapi_resource" "keyvault" {
     precondition {
       condition     = local.pe_subnet_id != null
       error_message = "Key Vault is configured with public access disabled but no PE subnet is available. Set external_pe_subnet_id (vending mode) or enable BYO VNet (standalone mode) to provide a subnet for the private endpoint."
+    }
+    precondition {
+      condition     = var.keyvault_name != null
+      error_message = "keyvault_name is required when create_keyvault = true."
     }
   }
 }
@@ -214,7 +224,7 @@ resource "azapi_resource" "kv_pe_dns" {
 # may be cross-subscription assignments managed by the platform team.
 # =============================================================================
 
-# AcrPull — the KUBELET identity pulls container images, not the cluster identity.
+# AcrPull -- the KUBELET identity pulls container images, not the cluster identity.
 # The kubelet identity objectId is exported from the AKS response.
 resource "azapi_resource" "role_acr_pull" {
   count     = var.create_acr ? 1 : 0
@@ -231,7 +241,7 @@ resource "azapi_resource" "role_acr_pull" {
   }
 }
 
-# Key Vault Certificate User — the APP ROUTING add-on identity fetches TLS
+# Key Vault Certificate User -- the APP ROUTING add-on identity fetches TLS
 # certificates, not the cluster control-plane identity. The add-on identity
 # objectId is exported from the AKS response.
 resource "azapi_resource" "role_kv_cert_user" {
@@ -249,7 +259,7 @@ resource "azapi_resource" "role_kv_cert_user" {
   }
 }
 
-# Network Contributor on the module-created spoke VNet — NAP provisions nodes in BYO subnets.
+# Network Contributor on the module-created spoke VNet -- NAP provisions nodes in BYO subnets.
 # In vending mode, this assignment is granted by the vending pipeline on the
 # pre-provisioned subnets instead of by this module. The SystemAssigned identity
 # dependency is resolved by Terraform because the AKS cluster and VNet are in the

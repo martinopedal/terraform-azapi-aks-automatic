@@ -1,5 +1,5 @@
 # =============================================================================
-# Scenario 1 – ALZ Corp with vending (recommended)
+# Scenario 1 - ALZ Corp with vending (recommended)
 #
 # The platform pipeline (subscription vending + AVNM IPAM) pre-provisions:
 #   - Spoke VNet, subnets (with delegations), NSG, UDR, hub peering
@@ -11,7 +11,7 @@ location            = "swedencentral"
 resource_group_name = "rg-aks-automatic"
 cluster_name        = "aks-automatic-corp"
 
-# BYO VNet is always true for Corp — the VNet is pre-provisioned by vending
+# BYO VNet is always true for Corp -- the VNet is pre-provisioned by vending
 enable_byo_vnet              = true
 external_node_subnet_id      = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-nodes"
 external_apiserver_subnet_id = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-apiserver"
@@ -21,19 +21,21 @@ external_pe_subnet_id        = "/subscriptions/<spoke-sub>/resourceGroups/<netwo
 egress_type         = "userDefinedRouting"
 firewall_private_ip = "10.0.1.4"
 
-pod_cidr       = "10.244.0.0/16"   # Coordinate with ALZ IPAM — must not overlap routable space
+pod_cidr       = "10.244.0.0/16"   # Coordinate with ALZ IPAM -- must not overlap routable space
 service_cidr   = "10.245.0.0/16"
 dns_service_ip = "10.245.0.10"
 
-# Private cluster (Corp default — no public API server)
+# Private cluster (Corp default -- no public API server)
 enable_private_cluster = true
 # private_dns_zone_id = "/subscriptions/<conn-sub>/resourceGroups/<dns-rg>/providers/Microsoft.Network/privateDnsZones/private.<region>.azmk8s.io"
 
 # ACR (Premium, private endpoint, no public access)
+create_acr              = true
 acr_name                = "acraksautocorp001"
 acr_private_dns_zone_id = "/subscriptions/<conn-sub>/resourceGroups/<dns-rg>/providers/Microsoft.Network/privateDnsZones/privatelink.azurecr.io"
 
 # Key Vault (RBAC, private endpoint, no public access)
+create_keyvault        = true
 keyvault_name          = "kv-aks-auto-corp-001"
 kv_private_dns_zone_id = "/subscriptions/<conn-sub>/resourceGroups/<dns-rg>/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
 
@@ -48,12 +50,12 @@ tags = {
 }
 
 # =============================================================================
-# Scenario 2 – Standalone (module creates VNet, no vending)
+# Scenario 2 - Standalone (module creates VNet, no vending)
 # Uncomment below and remove the external_*_subnet_id lines above.
 # =============================================================================
 
 # enable_byo_vnet                 = true
-# (do NOT set external_*_subnet_id — module creates subnets in network.tf)
+# (do NOT set external_*_subnet_id -- module creates subnets in network.tf)
 # vnet_name                       = "vnet-aks-automatic"
 # vnet_address_space              = "10.10.0.0/16"
 # node_subnet_name                = "snet-aks-nodes"

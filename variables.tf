@@ -3,7 +3,7 @@
 # =============================================================================
 
 variable "location" {
-  description = "Azure region. Must support AKS Automatic (API Server VNet Integration GA, ≥3 AZs)."
+  description = "Azure region. Must support AKS Automatic (API Server VNet Integration GA, >= 3 AZs)."
   type        = string
   default     = "swedencentral"
 }
@@ -93,6 +93,11 @@ variable "vnet_address_space" {
   description = "Address space for the VNet."
   type        = string
   default     = "10.10.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.vnet_address_space, 0))
+    error_message = "vnet_address_space must be a valid CIDR block (e.g. 10.10.0.0/16)."
+  }
 }
 
 variable "node_subnet_name" {
@@ -105,6 +110,11 @@ variable "node_subnet_address_prefix" {
   description = "Address prefix for the node subnet. Size depends on expected node count."
   type        = string
   default     = "10.10.0.0/22" # 1,022 usable IPs
+
+  validation {
+    condition     = can(cidrhost(var.node_subnet_address_prefix, 0))
+    error_message = "node_subnet_address_prefix must be a valid CIDR block (e.g. 10.10.0.0/22)."
+  }
 }
 
 variable "apiserver_subnet_name" {
@@ -117,6 +127,16 @@ variable "apiserver_subnet_address_prefix" {
   description = "Address prefix for the API server subnet. Minimum /28."
   type        = string
   default     = "10.10.4.0/28"
+
+  validation {
+    condition     = can(cidrhost(var.apiserver_subnet_address_prefix, 0))
+    error_message = "apiserver_subnet_address_prefix must be a valid CIDR block (e.g. 10.10.4.0/28)."
+  }
+
+  validation {
+    condition     = tonumber(split("/", var.apiserver_subnet_address_prefix)[1]) <= 28
+    error_message = "apiserver_subnet_address_prefix must be /28 or larger (smaller prefix number)."
+  }
 }
 
 variable "pe_subnet_name" {
@@ -129,6 +149,11 @@ variable "pe_subnet_address_prefix" {
   description = "Address prefix for the private endpoint subnet."
   type        = string
   default     = "10.10.12.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.pe_subnet_address_prefix, 0))
+    error_message = "pe_subnet_address_prefix must be a valid CIDR block (e.g. 10.10.12.0/24)."
+  }
 }
 
 # =============================================================================
@@ -141,14 +166,20 @@ variable "pe_subnet_address_prefix" {
 # =============================================================================
 
 variable "create_acr" {
-  description = "When true, creates a Premium ACR with private endpoint, DNS zone group, and AcrPull role assignment."
+  description = "When true, creates a Premium ACR with private endpoint, DNS zone group, and AcrPull role assignment. Requires a PE subnet (BYO VNet or external)."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "acr_name" {
   description = "Name of the Azure Container Registry. Must be globally unique, 5-50 alphanumeric characters."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.acr_name == null || can(regex("^[a-z0-9]{5,50}$", var.acr_name))
+    error_message = "acr_name must be 5-50 lowercase letters and numbers only (no hyphens or uppercase)."
+  }
 }
 
 variable "acr_private_dns_zone_id" {
@@ -162,14 +193,20 @@ variable "acr_private_dns_zone_id" {
 }
 
 variable "create_keyvault" {
-  description = "When true, creates a Key Vault with RBAC auth, private endpoint, DNS zone group, and Certificate User role assignment for App Routing TLS."
+  description = "When true, creates a Key Vault with RBAC auth, private endpoint, DNS zone group, and Certificate User role assignment for App Routing TLS. Requires a PE subnet (BYO VNet or external)."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "keyvault_name" {
   description = "Name of the Azure Key Vault. Must be globally unique, 3-24 alphanumeric characters and hyphens."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.keyvault_name == null || can(regex("^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$", var.keyvault_name))
+    error_message = "keyvault_name must be 3-24 characters: start with a letter, alphanumeric and hyphens only, end with alphanumeric."
+  }
 }
 
 variable "kv_private_dns_zone_id" {
@@ -217,18 +254,33 @@ variable "pod_cidr" {
   description = "CIDR for the pod overlay network."
   type        = string
   default     = "10.244.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.pod_cidr, 0))
+    error_message = "pod_cidr must be a valid CIDR block (e.g. 10.244.0.0/16)."
+  }
 }
 
 variable "service_cidr" {
   description = "CIDR for Kubernetes services."
   type        = string
   default     = "10.245.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.service_cidr, 0))
+    error_message = "service_cidr must be a valid CIDR block (e.g. 10.245.0.0/16)."
+  }
 }
 
 variable "dns_service_ip" {
   description = "IP address for the Kubernetes DNS service. Must be within service_cidr."
   type        = string
   default     = "10.245.0.10"
+
+  validation {
+    condition     = can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$", var.dns_service_ip))
+    error_message = "dns_service_ip must be a valid IPv4 address without a CIDR mask."
+  }
 }
 
 # =============================================================================
@@ -256,9 +308,9 @@ variable "enable_service_mesh" {
 # =============================================================================
 
 variable "enable_private_cluster" {
-  description = "When true, the API server is accessible only via the VNet-integrated ILB private IP. Public DNS entries are removed."
+  description = "When true (default for Corp), the API server is accessible only via the VNet-integrated ILB private IP. Public DNS entries are removed."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "private_dns_zone_id" {
@@ -302,6 +354,11 @@ variable "image_cleaner_interval_hours" {
   description = "Interval (hours) for the Image Cleaner to scan and remove unused vulnerable images. Default 168 hours (7 days)."
   type        = number
   default     = 168
+
+  validation {
+    condition     = var.image_cleaner_interval_hours >= 24
+    error_message = "image_cleaner_interval_hours must be >= 24."
+  }
 }
 
 # =============================================================================
@@ -328,4 +385,58 @@ variable "node_os_upgrade_channel" {
     condition     = contains(["NodeImage", "SecurityPatch", "Unmanaged", "None"], var.node_os_upgrade_channel)
     error_message = "node_os_upgrade_channel must be one of: NodeImage, SecurityPatch, Unmanaged, None."
   }
+}
+
+# =============================================================================
+# HTTP Proxy
+# =============================================================================
+
+variable "http_proxy_config" {
+  description = <<-EOT
+    HTTP proxy configuration for the AKS cluster. When set, both nodes and pods
+    are configured with the proxy environment variables. The trustedCa field
+    accepts a base64-encoded PEM CA certificate bundle for TLS-intercepting
+    proxies. Set to null (default) to disable HTTP proxy.
+  EOT
+  type = object({
+    http_proxy  = optional(string)
+    https_proxy = optional(string)
+    no_proxy    = optional(list(string), [])
+    trusted_ca  = optional(string)
+  })
+  default = null
+}
+
+# =============================================================================
+# Security (optional features)
+# =============================================================================
+
+variable "enable_defender" {
+  description = "Enable Microsoft Defender for Containers for runtime threat detection and vulnerability scanning."
+  type        = bool
+  default     = false
+}
+
+variable "log_analytics_workspace_id" {
+  description = "Resource ID of the Log Analytics workspace for Defender for Containers and diagnostic settings. Required when enable_defender = true."
+  type        = string
+  default     = null
+}
+
+variable "enable_cost_analysis" {
+  description = "Enable AKS cost analysis for per-namespace and per-workload cost breakdown in Azure Cost Management."
+  type        = bool
+  default     = false
+}
+
+variable "enable_purge_protection" {
+  description = "Enable purge protection on the Key Vault. When true, the vault cannot be permanently deleted during the soft-delete retention period. This setting is irreversible."
+  type        = bool
+  default     = true
+}
+
+variable "acr_zone_redundancy_enabled" {
+  description = "Enable zone redundancy for ACR. Requires Premium SKU and a region with availability zones."
+  type        = bool
+  default     = true
 }

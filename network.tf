@@ -3,11 +3,11 @@
 #
 # This file is used only when enable_byo_vnet = true AND no external subnet IDs
 # are provided. In that standalone mode it creates:
-#   • VNet with configurable address space
-#   • Node subnet (with NSG and optional Route Table association)
-#   • API server subnet (delegated to Microsoft.ContainerService/managedClusters)
-#   • NSG (empty – AKS manages its own rules)
-#   • Route Table resources when egress_type = userDefinedRouting
+#   - VNet with configurable address space
+#   - Node subnet (with NSG and optional Route Table association)
+#   - API server subnet (delegated to Microsoft.ContainerService/managedClusters)
+#   - NSG (empty - AKS manages its own rules)
+#   - Route Table resources when egress_type = userDefinedRouting
 #
 # In ALZ Corp vending mode, the spoke VNet, subnets, peering, UDR, and NSG are
 # pre-provisioned externally, so none of the resources in this file are created.
@@ -122,7 +122,7 @@ resource "azapi_resource" "apiserver_subnet" {
 }
 
 # =============================================================================
-# Egress – User-Defined Routing (forced-tunnelling through hub Azure Firewall)
+# Egress - User-Defined Routing (forced-tunnelling through hub Azure Firewall)
 #
 # ALZ Corp pattern: all spoke egress routes through the hub firewall via UDR.
 # The firewall must whitelist AKS required outbound FQDNs:
