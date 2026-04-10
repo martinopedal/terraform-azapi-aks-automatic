@@ -1,0 +1,85 @@
+name: "Security Scan"
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"  # Weekly Monday 06:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  checkov:
+    name: Checkov
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          # azapi_resource is not natively supported by Checkov.
+          # General Terraform checks (secrets, provider config) still apply.
+          # For Azure-specific checks on azapi resources, use the squad
+          # security_scan extension which understands the ARM body.
+          soft_fail: false
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
+          skip_check: CKV_TF_1  # Skip module source pinning (this is a root module)
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: checkov
+
+  tflint:
+    name: TFLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Init TFLint
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint --format compact --recursive
+
+  trivy:
+    name: Trivy IaC Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          # Trivy scans HCL for misconfigurations and secrets.
+          # Like Checkov, azapi_resource ARM body is not deeply analysed.
+          severity: CRITICAL,HIGH,MEDIUM
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy

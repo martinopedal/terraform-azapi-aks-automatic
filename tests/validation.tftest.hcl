@@ -1,6 +1,9 @@
-run "default_values_pass_validation" {
-  command = plan
-}
+# Validation-only tests: these check variable validation blocks
+# and do not require Azure credentials. They use expect_failures
+# which triggers before the provider is called.
+#
+# The default_values test is excluded because command = plan
+# requires Azure auth. Use the deploy pipeline for plan-level tests.
 
 run "egress_type_rejects_invalid_value" {
   command = plan

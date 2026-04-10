@@ -110,8 +110,8 @@ output "acr_id" {
 }
 
 output "acr_login_server" {
-  description = "Login server hostname for the ACR (e.g. myacr.azurecr.io)."
-  value       = var.create_acr ? "${var.acr_name}.azurecr.io" : null
+  description = "Login server hostname for the ACR (e.g. myacr.azurecr.io). Read from the ARM response to support sovereign clouds."
+  value       = try(azapi_resource.acr[0].output.properties.loginServer, null)
 }
 
 output "keyvault_id" {
@@ -120,8 +120,8 @@ output "keyvault_id" {
 }
 
 output "keyvault_uri" {
-  description = "URI of the Azure Key Vault (e.g. https://name.vault.azure.net/). Used in Kubernetes TLS annotations and SecretProviderClass manifests."
-  value       = var.create_keyvault && var.keyvault_name != null ? "https://${var.keyvault_name}.vault.azure.net/" : null
+  description = "URI of the Azure Key Vault (e.g. https://name.vault.azure.net/). Read from the ARM response to support sovereign clouds."
+  value       = try(azapi_resource.keyvault[0].output.properties.vaultUri, null)
 }
 
 output "pe_subnet_id" {
