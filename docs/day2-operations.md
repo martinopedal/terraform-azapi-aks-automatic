@@ -166,7 +166,72 @@ For private clusters, the Flux extension communicates with the Azure API (not th
 
 ### ArgoCD on AKS Automatic (ALZ Corp)
 
-ArgoCD is an alternative GitOps controller that runs entirely in-cluster. For ALZ Corp private clusters, the following considerations apply:
+Two deployment options are available for ArgoCD on AKS Automatic:
+
+#### Option 1: Managed ArgoCD Extension (recommended)
+
+The [ArgoCD AKS extension](https://learn.microsoft.com/azure/azure-arc/kubernetes/tutorial-use-gitops-argocd) (public preview) is a managed add-on that deploys ArgoCD as an AKS cluster extension. This is the recommended option for enterprise deployments because it provides:
+
+- **Entra ID SSO** built-in (no manual OIDC configuration needed)
+- **Workload Identity federation** to ACR and Azure DevOps (no stored credentials)
+- **Azure Linux hardened images** with reduced CVE surface
+- **Automatic patch releases** (opt-in) for security fixes
+- **HA mode** for production workloads
+- **Hub-and-spoke** multi-cluster GitOps support
+
+```bash
+# Install the ArgoCD managed extension
+az k8s-extension create \
+  --cluster-name <cluster> \
+  --resource-group <rg> \
+  --cluster-type managedClusters \
+  --extension-type microsoft.argocd \
+  --name argocd \
+  --configuration-settings \
+    "controller.replicas=2" \
+    "server.replicas=2"
+```
+
+For ALZ Corp private clusters:
+- The extension images are pulled from Microsoft-managed registries (no ACR import needed)
+- Entra ID SSO is configured automatically via the extension (no `argocd-cm` OIDC setup)
+- Workload Identity for ACR/ADO access is managed by the extension
+- You still need to configure CiliumNetworkPolicy for namespace isolation (see [ArgoCD bootstrap manifests](argocd/02-network-policy.yaml))
+- Expose the UI via Application Routing with internal LB (see [ArgoCD bootstrap manifests](argocd/05-ingress.yaml))
+
+**Terraform integration:** The extension can be deployed as an azapi child resource:
+
+```hcl
+resource "azapi_resource" "argocd_extension" {
+  type      = "Microsoft.KubernetesConfiguration/extensions@2023-05-01"
+  name      = "argocd"
+  parent_id = azapi_resource.aks.id
+
+  body = {
+    properties = {
+      extensionType            = "microsoft.argocd"
+      autoUpgradeMinorVersion  = true
+      configurationSettings = {
+        "controller.replicas" = "2"
+        "server.replicas"     = "2"
+      }
+    }
+  }
+}
+```
+
+#### Option 2: Self-managed ArgoCD (manual bootstrap)
+
+For full control over the ArgoCD version, configuration, and lifecycle, deploy ArgoCD manually using the bootstrap manifests in [docs/argocd/](argocd/README.md). This approach requires:
+
+- Manual image import into private ACR
+- Manual Entra ID OIDC SSO configuration
+- Manual Workload Identity setup for credential access
+- Manual upgrade management
+
+Use this option when you need specific ArgoCD versions, custom plugins, or configurations not supported by the managed extension.
+
+**Self-managed considerations for ALZ Corp private clusters:**
 
 **Networking:**
 - ArgoCD runs in-cluster, so API server access works without extra configuration (VNet-integrated ILB)

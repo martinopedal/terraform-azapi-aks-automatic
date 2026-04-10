@@ -977,8 +977,8 @@ After `terraform apply` completes, these steps finalize the cluster for producti
 | Connect to cluster | `az aks get-credentials --resource-group <rg> --name <cluster>` | Always |
 | Verify nodes | `kubectl get nodes` - confirm nodes are Ready across availability zones | Always |
 | Cross-subscription RBAC | Grant `Network Contributor`, `Private DNS Zone Contributor`, `Key Vault Certificate User` to AKS identity | ALZ Corp (not managed by this module) |
-| Import ArgoCD images to ACR | `az acr import --name <acr> --source quay.io/argoproj/argocd:v2.13.2` | If using ArgoCD |
-| Bootstrap ArgoCD | Apply manifests from [docs/argocd/](docs/argocd/README.md) | If using ArgoCD |
+| Install ArgoCD (managed extension) | `az k8s-extension create --extension-type microsoft.argocd` ([docs](https://learn.microsoft.com/azure/azure-arc/kubernetes/tutorial-use-gitops-argocd)) | Recommended for GitOps |
+| Bootstrap ArgoCD (self-managed) | Apply manifests from [docs/argocd/](docs/argocd/README.md) | If full control needed |
 | Create Karpenter NodePools | Apply `NodePool` + `AKSNodeClass` CRDs for workload-specific node pools | When customizing node provisioning |
 | Configure Azure Backup | Install backup extension, create vault and policy | Production workloads |
 
