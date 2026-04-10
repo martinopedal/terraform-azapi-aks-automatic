@@ -33,6 +33,15 @@ locals {
   # --- Ingress ---
   dns_zone_ids = length(var.dns_zone_resource_ids) > 0 ? var.dns_zone_resource_ids : null
 
+  # --- Identity ---
+  # Custom private DNS zones require UserAssigned identity
+  use_user_assigned_identity = (
+    var.enable_private_cluster &&
+    var.private_dns_zone_id != null &&
+    var.private_dns_zone_id != "system" &&
+    var.private_dns_zone_id != "none"
+  )
+
   # --- Tags ---
   tags = var.tags
 }

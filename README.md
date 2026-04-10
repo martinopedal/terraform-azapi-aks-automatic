@@ -1210,6 +1210,65 @@ az k8s-configuration flux create \
 
 For private clusters, the Flux extension communicates with the Azure API (not the Git server directly from the cluster). If the Git repository is private (GitHub Enterprise, Azure DevOps), configure an SSH deploy key or PAT via `--ssh-private-key-file` or `--https-user`/`--https-key`.
 
+### ArgoCD on AKS Automatic (ALZ Corp)
+
+ArgoCD is an alternative GitOps controller that runs entirely in-cluster. For ALZ Corp private clusters, the following considerations apply:
+
+**Networking:**
+- ArgoCD runs in-cluster, so API server access works without extra configuration (VNet-integrated ILB)
+- Git repository egress (GitHub, Azure DevOps) must be allowed through the hub Azure Firewall
+- Import ArgoCD container images into the private ACR to avoid external registry dependencies:
+  ```bash
+  az acr import --name <acr> --source quay.io/argoproj/argocd:v2.13.0
+  ```
+- Webhook delivery from GitHub/Azure DevOps cannot reach private clusters directly. Use polling (default 3-minute interval, configurable)
+
+**Identity and RBAC:**
+- AKS Automatic enforces Azure RBAC (local accounts disabled). Configure ArgoCD SSO with Entra ID via OIDC in the `argocd-cm` ConfigMap
+- Map Entra ID groups to ArgoCD roles in `argocd-rbac-cm`
+- Use Workload Identity Federation for ArgoCD to access Key Vault secrets (Git credentials, TLS certs)
+
+**Ingress (ArgoCD UI):**
+- Expose via Application Routing with an internal load balancer:
+  ```yaml
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    name: argocd-server
+    namespace: argocd
+    annotations:
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      kubernetes.azure.com/tls-cert-keyvault-uri: "https://<vault>.vault.azure.net/certificates/<cert>"
+  spec:
+    ingressClassName: webapprouting.kubernetes.azure.com
+    rules:
+      - host: argocd.<private-dns-zone>
+        http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: argocd-server
+                  port:
+                    number: 443
+  ```
+
+**Multi-environment pattern:**
+- Use ArgoCD ApplicationSet with a Git generator for directory-based environments:
+  ```
+  clusters/
+    dev/apps/<app>/
+    staging/apps/<app>/
+    prod/apps/<app>/
+  ```
+
+**Security:**
+- Run ArgoCD in a dedicated `argocd` namespace with CiliumNetworkPolicy restricting egress to API server, Git endpoints (via firewall), ACR and Key Vault (via private endpoints)
+- Store Git credentials in Key Vault, synced via Workload Identity + External Secrets Operator
+
+Run `gitops_review` from the squad extensions for a full readiness assessment.
+
 ### Cilium Network Policy Operations
 
 AKS Automatic uses Cilium as the network policy engine. Standard Kubernetes `NetworkPolicy` resources work out of the box. For advanced L3/L4/L7 control, use `CiliumNetworkPolicy` CRDs:
