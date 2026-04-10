@@ -25,6 +25,10 @@ metadata:
     app.kubernetes.io/part-of: argocd
 data:
   # OIDC configuration for Entra ID
+  # OIDC configuration for Entra ID.
+  # NOTE: The clientSecret field uses ArgoCD's $-variable syntax to
+  # reference the value from the argocd-secret Kubernetes Secret
+  # (key: oidc.entra.clientSecret). No actual secret is stored here.
   oidc.config: |
     name: "Entra ID"
     issuer: "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
