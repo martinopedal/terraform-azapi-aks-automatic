@@ -11,6 +11,7 @@ const AVAILABLE_MODELS = [
   { id: "claude-opus-4.6-1m", name: "Claude Opus 4.6 (1M)", tier: "premium" },
   { id: "claude-opus-4.5", name: "Claude Opus 4.5", tier: "premium" },
   { id: "claude-sonnet-4", name: "Claude Sonnet 4", tier: "standard" },
+  { id: "goldeneye", name: "Goldeneye", tier: "standard" },
   { id: "gpt-5.4", name: "GPT-5.4", tier: "standard" },
   { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", tier: "standard" },
   { id: "gpt-5.2-codex", name: "GPT-5.2 Codex", tier: "standard" },
@@ -21,14 +22,8 @@ const AVAILABLE_MODELS = [
   { id: "gpt-4.1", name: "GPT-4.1", tier: "fast" },
 ];
 
-// Default set: one from each family/tier for breadth
-const DEFAULT_MODELS = [
-  "claude-opus-4.6",
-  "claude-sonnet-4.6",
-  "gpt-5.4",
-  "gpt-5.3-codex",
-  "claude-haiku-4.5",
-];
+// Default: ALL models for maximum consensus coverage
+const DEFAULT_MODELS = AVAILABLE_MODELS.map((m) => m.id);
 
 function gatherContext(dir) {
   const files = {};
@@ -169,13 +164,7 @@ const session = await joinSession({
         }
 
         lines.push(`\n**Total:** ${AVAILABLE_MODELS.length} models`);
-        lines.push("\n**Default set** (5 models for balanced coverage):");
-        for (const id of DEFAULT_MODELS) {
-          const m = AVAILABLE_MODELS.find((x) => x.id === id);
-          lines.push(`- \`${id}\` (${m ? m.name : id})`);
-        }
-
-        lines.push('\nPass `models: ["all"]` to use all 15 models.');
+        lines.push("\n**Default:** All models are used by default for maximum consensus coverage.");
 
         return lines.join("\n");
       },
