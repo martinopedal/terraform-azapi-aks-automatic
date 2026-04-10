@@ -45,9 +45,9 @@ This repository contains a Terraform root module that deploys an **AKS Automatic
 
 The module supports:
 
-- BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints); this module currently implements the node and API server subnets, with AGC and private endpoint subnets added as needed
+- BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints). This module implements the node, API server, and private endpoint subnets. The AGC subnet is not created by this module (AGC add-on is not yet available on AKS Automatic).
 - Two egress options: User-Defined Routing through hub firewall (Corp default) and Standard Load Balancer (dev/test only). Managed NAT Gateway available only with AKS-managed VNet.
-- Three ingress options: Application Gateway for Containers, Application Routing add-on, Istio
+- Two ingress options implemented: Application Routing add-on (managed NGINX, preconfigured) and Istio service mesh (optional). Application Gateway for Containers is documented for reference but not yet supported on AKS Automatic.
 - Private cluster with VNet-integrated API server
 - Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
 - HTTP proxy support for TLS-intercepting proxy environments ([docs](https://learn.microsoft.com/azure/aks/http-proxy))
@@ -84,11 +84,11 @@ In AKS Automatic, many features that are optional in Standard become **preconfig
 
 ### ALZ Corp Architecture Diagram
 
-The following diagrams show AKS Automatic deployed in an ALZ Corp spoke subscription with private connectivity. The SVG diagram below renders directly on GitHub. The editable DrawIO source is at [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio) ([open in diagrams.net](https://app.diagrams.net/#Uhttps%3A%2F%2Fraw.githubusercontent.com%2Fmartinopedal%2Fterraform-azapi-aks-automatic%2Fmain%2Fdocs%2Falz-corp-aks-automatic.drawio)).
+The following diagrams show AKS Automatic deployed in an ALZ Corp spoke subscription with private connectivity. The editable DrawIO source is at [`docs/alz-corp-aks-automatic.drawio`](docs/alz-corp-aks-automatic.drawio) ([open in diagrams.net](https://app.diagrams.net/#Uhttps%3A%2F%2Fraw.githubusercontent.com%2Fmartinopedal%2Fterraform-azapi-aks-automatic%2Fmain%2Fdocs%2Falz-corp-aks-automatic.drawio)).
 
 #### Detailed Architecture
 
-![ALZ Corp - AKS Automatic Architecture](docs/alz-corp-aks-automatic.drawio.png)
+![ALZ Corp - AKS Automatic Architecture](docs/alz-corp-aks-automatic.drawio.svg)
 
 #### Schematic Traffic Flows
 
@@ -327,11 +327,11 @@ Corp considerations: Use `Internal` mode. When combined with UDR egress, the hub
 
 | | AGC | App Routing (NGINX) | Istio Gateway |
 |---|---|---|---|
-| AKS Automatic support | No add-on not yet available | ✅ preconfigured | ✅ opt-in |
+| AKS Automatic support | ❌ add-on not yet available | ✅ preconfigured | ✅ opt-in |
 | Gateway API | ✅ | Ingress API (Gateway API planned) | Istio Gateway CRD (K8s Gateway API planned) |
 | L7 features | WAF, mTLS, rewrites, traffic splits | Host/path routing, TLS | Traffic mgmt, mTLS, fault injection |
-| Private IP frontend | No not yet supported | ✅ internal LB | ✅ internal mode |
-| ALZ Corp recommended | No until add-on + private IP ship | **✅ Primary for Corp** | ✅ Service mesh scenarios |
+| Private IP frontend | ❌ not yet supported | ✅ internal LB | ✅ internal mode |
+| ALZ Corp recommended | ❌ until add-on + private IP ship | **✅ Primary for Corp** | ✅ Service mesh scenarios |
 | Managed by | Azure (AGC resource) | AKS (in-cluster) | AKS (in-cluster) |
 
 ### Egress
@@ -400,11 +400,11 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 
 | | Managed NAT GW | Load Balancer | UDR |
 |---|---|---|---|
-| BYO VNet | No | ✅ | ✅ |
-| Static outbound IP | No | No | Via firewall |
+| BYO VNet | ❌ | ✅ | ✅ |
+| Static outbound IP | ❌ | ❌ | Via firewall |
 | SNAT ports | High (auto) | ~1k per node | Via firewall |
-| Centralised filtering | No | No | ✅ |
-| ALZ Corp suitable | No | No | ✅ |
+| Centralised filtering | ❌ | ❌ | ✅ |
+| ALZ Corp suitable | ❌ | ❌ | ✅ |
 | Terraform setting | `enable_byo_vnet = false` | `egress_type = "loadBalancer"` | `egress_type = "userDefinedRouting"` |
 
 ### Security
@@ -504,7 +504,7 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 | Maintenance windows | `maintenanceConfigurations` |
 | Networking | BYO VNet, pod/service CIDRs, DNS service IP, HTTP proxy |
 | Egress | UDR through hub firewall (Corp default), Load Balancer (dev/test only) |
-| Ingress | AGC add-on, DNS zones for App Routing, Istio |
+| Ingress | DNS zones for App Routing, Istio. AGC documented for reference but not yet supported on AKS Automatic. |
 | Private cluster | `enable_private_cluster`, `authorized_ip_ranges` |
 | Monitoring | Prometheus, Container Insights, Managed Grafana, cost analysis |
 | Scaling | KEDA, VPA, HPA, autoscaler profile |
@@ -549,11 +549,13 @@ The module uses Terraform [`precondition`](https://developer.hashicorp.com/terra
 |---|---|
 | External subnet IDs must be all-or-none | Setting `external_node_subnet_id` without `external_apiserver_subnet_id` (or vice versa) would produce a broken cluster payload |
 | Custom `private_dns_zone_id` blocked with SystemAssigned identity | Custom private DNS zones [require UserAssigned identity](https://learn.microsoft.com/azure/aks/private-clusters#configure-a-private-dns-zone); this module uses SystemAssigned |
-| `firewall_private_ip` required for UDR egress | Omitting the firewall IP when `egress_type = userDefinedRouting` would create a route table with no next hop |
+| `firewall_private_ip` required for UDR egress | Omitting the firewall IP when `egress_type = userDefinedRouting` would create a route table with no next hop. Applies only in standalone BYO VNet mode (not vending mode, where the UDR is pre-provisioned). |
 | `log_analytics_workspace_id` required for Defender | [Defender for Containers](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction) requires a Log Analytics workspace for security event storage |
 | `acr_name` required when `create_acr = true` | Prevents plan failure from missing required resource name |
 | `keyvault_name` required when `create_keyvault = true` | Prevents plan failure from missing required resource name |
 | PE subnet required for ACR/KV with public access disabled | ACR and Key Vault are created with `publicNetworkAccess = Disabled` and need a private endpoint subnet |
+| External subnet IDs blocked when `enable_byo_vnet = false` | Prevents conflicting configuration where external subnets are combined with managed VNet egress |
+| `http_proxy_config` requires at least one proxy URL | Prevents setting an empty proxy config with neither `http_proxy` nor `https_proxy` defined |
 
 ### Security Defaults
 
@@ -785,7 +787,7 @@ If the ALZ platform uses the [AVM Subscription Vending module](https://github.co
 ## Terraform Project Structure
 
 ```
-aks-automatic-azapi/
+terraform-azapi-aks-automatic/
 ├── terraform.tf              # Terraform block, providers
 ├── data.tf                   # Data source (client config)
 ├── locals.tf                 # Computed values, conditional logic
@@ -795,10 +797,17 @@ aks-automatic-azapi/
 ├── main.tf                   # Resource group + AKS cluster
 ├── outputs.tf                # Outputs
 ├── terraform.tfvars.example  # Example values for common scenarios
+├── AGENTS.md                 # AI agent instructions
+├── CONTRIBUTING.md           # Contribution guidelines
+├── LICENSE                   # License
+├── SECURITY.md               # Security policy
+├── .gitignore
 ├── .github/
 │   └── copilot-instructions.md
 ├── docs/
-│   └── alz-corp-aks-automatic.drawio
+│   ├── alz-corp-aks-automatic.drawio
+│   ├── alz-corp-aks-automatic.drawio.png
+│   └── alz-corp-aks-automatic.drawio.svg
 └── README.md
 ```
 
@@ -1034,7 +1043,7 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** (open-source). This i
 | Audit trails and forensics | Limited | ✅ |
 | Multi-cluster mesh | Not available | ✅ |
 | Commercial SLA | Azure support | Azure + Isovalent support |
-| Windows node support | No | No (roadmap) |
+| Windows node support | ❌ | ❌ (roadmap) |
 | Upgrade from OSS | N/A | One-click via Marketplace |
 
 **When to consider Cilium Enterprise:**
@@ -1327,9 +1336,9 @@ The table below covers AKS Automatic and all its dependencies referenced in this
 | **Azure CNI Overlay + Cilium** | ✅ | ✅ | GA | Preconfigured in Automatic |
 | **Node Autoprovisioning (NAP/Karpenter)** | ✅ | ✅ | GA | Preconfigured in Automatic |
 | **Application Routing add-on (NGINX)** | ✅ | ✅ | GA | Preconfigured in Automatic |
-| **Application Gateway for Containers** | ✅ | No | GA (limited regions) | [AGC region list](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions) includes Norway East but not Sweden Central |
-| **AGC AKS add-on on Automatic** | No | No | Not yet supported | Add-on not available on AKS Automatic clusters |
-| **AGC private IP frontend** | No | No | Not yet supported | Public FQDN only. Private IP in development |
+| **Application Gateway for Containers** | ✅ | ❌ | GA (limited regions) | [AGC region list](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions) includes Norway East but not Sweden Central |
+| **AGC AKS add-on on Automatic** | ❌ | ❌ | Not yet supported | Add-on not available on AKS Automatic clusters |
+| **AGC private IP frontend** | ❌ | ❌ | Not yet supported | Public FQDN only. Private IP in development |
 | **Istio service mesh add-on** | ✅ | ✅ | GA | Available in all AKS regions |
 | **Managed Prometheus (Azure Monitor workspace)** | ✅ | ✅ | GA | [Workspace regions](https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-metrics-overview) include both |
 | **Container Insights** | ✅ | ✅ | GA | |

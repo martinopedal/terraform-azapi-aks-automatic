@@ -13,7 +13,7 @@ locals {
   # Egress type: BYO VNet (either path) uses var.egress_type; managed VNet uses managedNATGateway
   outbound_type = var.enable_byo_vnet ? var.egress_type : "managedNATGateway"
 
-  # Subnet IDs -- resolved from module-created, externally-provided, or null (managed VNet)
+  # Subnet IDs: resolved from module-created, externally-provided, or null (managed VNet)
   node_subnet_id = (
     local.create_network ? azapi_resource.node_subnet[0].id :
     local.use_external_subnets ? var.external_node_subnet_id :

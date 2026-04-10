@@ -224,7 +224,7 @@ resource "azapi_resource" "kv_pe_dns" {
 # may be cross-subscription assignments managed by the platform team.
 # =============================================================================
 
-# AcrPull -- the KUBELET identity pulls container images, not the cluster identity.
+# AcrPull: the KUBELET identity pulls container images, not the cluster identity.
 # The kubelet identity objectId is exported from the AKS response.
 resource "azapi_resource" "role_acr_pull" {
   count     = var.create_acr ? 1 : 0
@@ -241,7 +241,7 @@ resource "azapi_resource" "role_acr_pull" {
   }
 }
 
-# Key Vault Certificate User -- the APP ROUTING add-on identity fetches TLS
+# Key Vault Certificate User: the APP ROUTING add-on identity fetches TLS
 # certificates, not the cluster control-plane identity. The add-on identity
 # objectId is exported from the AKS response.
 resource "azapi_resource" "role_kv_cert_user" {
@@ -259,7 +259,7 @@ resource "azapi_resource" "role_kv_cert_user" {
   }
 }
 
-# Network Contributor on the module-created spoke VNet -- NAP provisions nodes in BYO subnets.
+# Network Contributor on the module-created spoke VNet. NAP provisions nodes in BYO subnets.
 # In vending mode, this assignment is granted by the vending pipeline on the
 # pre-provisioned subnets instead of by this module. The SystemAssigned identity
 # dependency is resolved by Terraform because the AKS cluster and VNet are in the

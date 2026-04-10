@@ -9,12 +9,12 @@ This module deploys AKS Automatic clusters using the azapi provider, with ALZ Co
 - ✅ All infrastructure is Terraform (HCL) using the azapi provider
 - ✅ AKS Automatic with ALZ Corp landing zone integration
 - ✅ Supports BYO VNet with subnet delegation
-- ✅ Ingress options: AGC, NGINX, Istio
-- ✅ Egress options: NAT Gateway, UDR, Load Balancer
+- ✅ Ingress options: Application Routing (NGINX, preconfigured), Istio (optional). AGC documented but not yet supported on AKS Automatic.
+- ✅ Egress options: UDR (hub firewall), Load Balancer. Managed NAT Gateway applies only with AKS-managed VNet.
 
 ## Code Quality
 
 - ✅ Run `terraform fmt -check -recursive` before committing
 - ✅ Run `terraform validate` before committing
 - ✅ Follow existing file naming conventions
-- ✅ Only use checkmarks in documentation lists, no AI language or em dashes
+- ✅ Only use green checkmarks (✅) and red crosses (❌) in documentation lists and tables, no other emojis, no AI language, no em/en dashes

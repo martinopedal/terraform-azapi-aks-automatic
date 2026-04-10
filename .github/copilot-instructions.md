@@ -2,7 +2,7 @@
 
 ## What this repo is
 
-A Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resources. The azurerm provider is present only for data sources (`data.azurerm_client_config`, `data.azurerm_subscription`).
+A Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resources. The azurerm provider is present only for the `data.azurerm_client_config` data source.
 
 ## Commands
 
@@ -36,7 +36,7 @@ No test framework is configured. Validate changes with `terraform validate`. Alw
 
 The module supports three networking modes controlled by `var.enable_byo_vnet` and the external subnet ID variables:
 
-- **External subnets (`enable_byo_vnet = false` with external subnet IDs, default / recommended for Corp):** the ALZ vending pipeline pre-provisions the spoke VNet, subnets, peering, NSG, and UDR. `network.tf` is skipped, `dependencies.tf` creates ACR/Key Vault/private endpoints/RBAC, and `main.tf` passes the supplied subnet IDs to AKS.
+- **External subnets (`enable_byo_vnet = true` with external subnet IDs, default / recommended for Corp):** the ALZ vending pipeline pre-provisions the spoke VNet, subnets, peering, NSG, and UDR. `network.tf` is skipped, `dependencies.tf` creates ACR/Key Vault/private endpoints/RBAC, and `main.tf` passes the supplied subnet IDs to AKS.
 - **Module-created VNet (`enable_byo_vnet = true` without external subnet IDs):** `network.tf` creates the spoke VNet, node subnet, API server subnet, optional PE subnet, NSG, and UDR resources needed by the cluster.
 - **AKS-managed networking (`enable_byo_vnet = false` without external subnet IDs):** all resources in `network.tf` and the PE subnet are skipped, and AKS manages its own virtual network resources.
 
@@ -88,7 +88,7 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
 
 ### VNet and subnet ownership
 
-- In ALZ, the **connectivity subscription** typically owns the hub VNet and the platform team manages VNet peering. For Corp, the recommended pattern is to consume spoke subnets pre-provisioned by the vending pipeline: set `enable_byo_vnet = false` and pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id`.
+- In ALZ, the **connectivity subscription** typically owns the hub VNet and the platform team manages VNet peering. For Corp, the recommended pattern is to consume spoke subnets pre-provisioned by the vending pipeline: set `enable_byo_vnet = true` and pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_pe_subnet_id`.
 - If you are not using vending, set `enable_byo_vnet = true` so `network.tf` creates the spoke VNet and required subnets in this state. This module does not create hub peering resources.
 
 ### CIDR coordination with the ALZ IP plan
@@ -102,7 +102,7 @@ This module is designed to deploy into a **spoke subscription** within an Azure 
 
 ### DNS - Private DNS zones
 
-- AKS Automatic always uses API Server VNet Integration. The API server is an ILB in the delegated subnet, not a Private Endpoint. When `enable_private_cluster = true`, the FQDN becomes `<cluster>-<hash>.private.<region>.azmk8s.io` (note: `private.`, not `privatelink.` -- the `privatelink.` zone is the legacy non-VNet-integrated model). This requires a `private.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet. Without private cluster, no Private DNS Zone is needed for API server access.
+- AKS Automatic always uses API Server VNet Integration. The API server is an ILB in the delegated subnet, not a Private Endpoint. When `enable_private_cluster = true`, the FQDN becomes `<cluster>-<hash>.private.<region>.azmk8s.io` (note: `private.`, not `privatelink.`. The `privatelink.` zone is the legacy non-VNet-integrated model). This requires a `private.<region>.azmk8s.io` Private DNS Zone linked to the hub VNet. Without private cluster, no Private DNS Zone is needed for API server access.
 - In ALZ, Private DNS Zones are typically hosted in the **connectivity subscription** and managed by the platform team. Do **not** create duplicate Private DNS Zones in the spoke.
 - For Application Routing DNS integration, the `dns_zone_resource_ids` variable must point to zones the platform team has pre-created. The AKS managed identity needs `Private DNS Zone Contributor` on private zones and `DNS Zone Contributor` on public zones - this is a **cross-subscription RBAC assignment** that must be handled by the ALZ platform team or a separate Terraform state.
 
