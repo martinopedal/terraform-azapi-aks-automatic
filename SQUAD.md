@@ -18,6 +18,7 @@ Eight extensions in `.github/extensions/` provide domain-specific static analysi
 | `terraform-engineer` | `terraform_engineering_review` | HCL quality (provider pinning, types, descriptions, patterns) |
 | `gitops-architect` | `gitops_review` | ArgoCD readiness for ALZ Corp private clusters (networking, identity, ingress) |
 | `squad-coordinator` | `squad_dispatch`, `squad_status`, `squad_run_all` | Routes issues to squad tools, roster, full scan orchestration |
+| `rubber-duck` | `rubber_duck_review`, `list_review_models` | Multi-model critique across 15 AI models (Claude + GPT families) |
 
 ### Local usage (Copilot CLI)
 
