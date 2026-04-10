@@ -1,0 +1,41 @@
+name: Squad task
+description: General squad task for CI/CD, documentation, style, or other improvements.
+labels: ["squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Squad dispatch** automatically routes this issue based on labels.
+        Add one or more domain labels to match the right squad tool:
+
+        | Label | Squad tool |
+        |---|---|
+        | `security` | `security_scan` |
+        | `networking` | `network_review` |
+        | `alz` | `alz_alignment_check` |
+        | `testing` | `terraform_engineering_review` |
+        | `feature-tracking` | `aks_feature_scan` |
+        | `ci-cd` | `terraform_validate_full` |
+        | `documentation` | `doc_check` |
+        | `enhancement` | `style_check` |
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be done?
+    validations:
+      required: true
+  - type: checkboxes
+    id: domain
+    attributes:
+      label: Domain labels to apply
+      description: Select all that apply. The squad dispatcher will route accordingly.
+      options:
+        - label: "ci-cd"
+        - label: "documentation"
+        - label: "enhancement"
+        - label: "security"
+        - label: "networking"
+        - label: "alz"
+        - label: "testing"
+        - label: "feature-tracking"
