@@ -305,6 +305,11 @@ resource "azapi_resource" "aks" {
       condition     = !var.enable_kms || var.kms_key_id != null
       error_message = "kms_key_id is required when enable_kms = true."
     }
+
+    precondition {
+      condition     = !var.enable_kms || var.kms_key_vault_network_access != "Private" || var.kms_key_vault_resource_id != null
+      error_message = "kms_key_vault_resource_id is required when enable_kms = true and kms_key_vault_network_access = Private."
+    }
   }
 }
 

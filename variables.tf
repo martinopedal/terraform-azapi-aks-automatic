@@ -15,9 +15,14 @@ variable "resource_group_name" {
 }
 
 variable "cluster_name" {
-  description = "Name of the AKS Automatic cluster."
+  description = "Name of the AKS Automatic cluster. Must be 1-63 characters, alphanumeric and hyphens only, start and end with alphanumeric."
   type        = string
   default     = "aks-automatic"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]$", var.cluster_name))
+    error_message = "cluster_name must be 1-63 characters, start and end with alphanumeric, contain only alphanumeric characters and hyphens."
+  }
 }
 
 variable "kubernetes_version" {

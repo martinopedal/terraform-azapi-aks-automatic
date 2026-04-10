@@ -418,7 +418,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Image Cleaner | Enabled, default 7-day interval | Yes - `image_cleaner_interval_hours` (minimum 24) |
 | Deployment Safeguards | Azure Policy, Warning mode | No (severity adjustable via Policy) |
 | Defender for Containers | Optional | Yes - `enable_defender` + `log_analytics_workspace_id` |
-| Azure Key Vault KMS | Optional | Yes - `securityProfile.azureKeyVaultKms` (not yet wired in this module) |
+| Azure Key Vault KMS | Optional | Yes - `enable_kms` + `kms_key_id` |
 | Custom CA trust certs | Optional, up to 10 | Conditional - see caveat below |
 | Key Vault purge protection | Enabled by default | Yes - `enable_purge_protection` (irreversible once enabled) |
 | Private cluster | Optional | Yes - `enable_private_cluster` |
@@ -431,7 +431,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Component | Default State | Configurable |
 |---|---|---|
 | Managed Prometheus | Enabled (CLI/Portal) | Yes - `enable_prometheus` |
-| Container Insights | Enabled (CLI/Portal) | Not wired in this module; configure via CLI or portal |
+| Container Insights | Optional | Yes - `enable_container_insights` + `log_analytics_workspace_id` |
 | Azure Monitor Dashboards | Built-in via portal | Yes - link Managed Grafana |
 | ACNS network observability | Not enabled | Yes - `advancedNetworking` (not yet wired in this module) |
 | Cost analysis | Not enabled | Yes - `enable_cost_analysis` |
@@ -443,7 +443,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Cluster auto-upgrade | `stable` channel | Yes - `upgrade_channel` |
 | Node OS upgrade | `NodeImage` channel | Yes - `node_os_upgrade_channel` |
 | K8s API deprecation detection | Enabled | No |
-| Planned maintenance windows | Configurable | Yes - `maintenanceConfigurations` (not yet wired in this module; use CLI) |
+| Planned maintenance windows | Configurable | Yes - `maintenance_window` variable |
 
 ### Scaling
 
@@ -826,11 +826,29 @@ The azapi provider communicates directly with the Azure Resource Manager REST AP
 
 ### Prerequisites
 
+**Tools:**
 - Terraform >= 1.9
 - Azure CLI authenticated (`az login`)
+- azapi provider (downloaded automatically by `terraform init`)
+
+**Azure subscription requirements:**
 - Subscription quota for 16+ vCPUs of D-series VMs in the target region
-- Region must support API Server VNet Integration (GA)
+- Region must support API Server VNet Integration (GA in all public regions except `qatarcentral`)
 - `Microsoft.PolicyInsights` resource provider registered
+
+**Before `terraform apply` (ALZ Corp):**
+- **Remote backend:** Configure an Azure Storage backend for state persistence and locking. This module uses `prevent_destroy` on critical resources; local state is not suitable for production. Create a `backend.tf` with your storage account details.
+- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), and PE subnet are pre-provisioned by the ALZ vending pipeline.
+- **Firewall rules:** When using `egress_type = "userDefinedRouting"`, the hub Azure Firewall must whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). The `AzureKubernetesService` FQDN tag covers most requirements.
+- **Private DNS zones:** For private clusters, ensure `private.<region>.azmk8s.io` Private DNS Zone exists in the connectivity subscription and is linked to the hub VNet.
+- **Cross-subscription RBAC (not managed by this module):**
+  - `Network Contributor` on the spoke VNet/subnets for the AKS cluster identity
+  - `Private DNS Zone Contributor` on referenced private DNS zones for Application Routing
+  - `DNS Zone Contributor` on referenced public DNS zones for Application Routing
+  - `Key Vault Certificate User` on any Key Vault used for TLS certs
+- **Log Analytics workspace:** Required when `enable_defender = true` or `enable_container_insights = true`. Pass the workspace resource ID via `log_analytics_workspace_id`.
+- **UserAssigned identity:** Required when `private_dns_zone_id` is a custom resource ID. Create a managed identity with `Private DNS Zone Contributor` on the zone and pass its resource ID via `user_assigned_identity_id`.
+- **CIDR coordination:** Verify that VNet, pod, and service CIDRs do not overlap with hub VNet, other spokes, or on-premises networks. See [CIDR Coordination](#cidr-coordination).
 
 ### Quick Start
 

@@ -141,7 +141,7 @@ resource "azapi_resource" "route_table" {
 
   body = {
     properties = {
-      disableBgpRoutePropagation = false
+      disableBgpRoutePropagation = true
 
       routes = [
         {

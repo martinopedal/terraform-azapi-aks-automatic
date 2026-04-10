@@ -61,6 +61,8 @@ resource "azapi_resource" "acr" {
     }
   }
 
+  response_export_values = ["properties.loginServer"]
+
   lifecycle {
     precondition {
       condition     = local.pe_subnet_id != null
@@ -153,6 +155,8 @@ resource "azapi_resource" "keyvault" {
       }
     }
   }
+
+  response_export_values = ["properties.vaultUri"]
 
   lifecycle {
     precondition {

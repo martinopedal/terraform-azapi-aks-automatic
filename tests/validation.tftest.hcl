@@ -1,12 +1,19 @@
-run "default_values_pass_validation" {
-  command = plan
-}
+# Validation-only tests: these check variable validation blocks
+# and do not require Azure credentials. They use expect_failures
+# which triggers before the provider is called.
+#
+# Mock providers are required because terraform test initialises
+# all providers even for validation-only runs.
+
+mock_provider "azurerm" {}
+mock_provider "azapi" {}
 
 run "egress_type_rejects_invalid_value" {
   command = plan
 
   variables {
-    egress_type = "natGateway"
+    egress_type     = "natGateway"
+    enable_byo_vnet = false
   }
 
   expect_failures = [
@@ -19,6 +26,8 @@ run "upgrade_channel_rejects_invalid_value" {
 
   variables {
     upgrade_channel = "latest"
+    enable_byo_vnet = false
+    egress_type     = "loadBalancer"
   }
 
   expect_failures = [
@@ -31,6 +40,8 @@ run "node_os_upgrade_channel_rejects_invalid_value" {
 
   variables {
     node_os_upgrade_channel = "Automatic"
+    enable_byo_vnet         = false
+    egress_type             = "loadBalancer"
   }
 
   expect_failures = [
@@ -43,6 +54,8 @@ run "kms_key_vault_network_access_rejects_invalid_value" {
 
   variables {
     kms_key_vault_network_access = "Restricted"
+    enable_byo_vnet              = false
+    egress_type                  = "loadBalancer"
   }
 
   expect_failures = [
@@ -55,6 +68,8 @@ run "image_cleaner_interval_hours_rejects_below_24" {
 
   variables {
     image_cleaner_interval_hours = 12
+    enable_byo_vnet              = false
+    egress_type                  = "loadBalancer"
   }
 
   expect_failures = [

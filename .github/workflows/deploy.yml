@@ -47,6 +47,12 @@ jobs:
         run: terraform plan -out=tfplan -detailed-exitcode
         continue-on-error: true
 
+      - name: Fail on plan error
+        if: steps.plan.outputs.exitcode == '1'
+        run: |
+          echo "::error::Terraform plan failed with errors"
+          exit 1
+
       - name: Upload Plan
         if: steps.plan.outputs.exitcode == '2'
         uses: actions/upload-artifact@v7
