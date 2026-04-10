@@ -2,39 +2,46 @@
 
 ## Table of Contents
 
+### Getting Started
 - [Overview](#overview)
-- [AKS Automatic vs AKS Standard](#aks-automatic-vs-aks-standard)
-- [Architecture](#architecture)
-  - [ALZ Corp Architecture Diagram](#alz-corp-architecture-diagram)
-  - [Traffic Flows](#traffic-flows)
-- [AKS Automatic Components](#aks-automatic-components)
-  - [SKU and Cluster Tier](#sku-and-cluster-tier)
-  - [Node Provisioning (Karpenter)](#node-provisioning-karpenter)
-  - [Networking](#networking)
-  - [HTTP Proxy](#http-proxy)
-  - [Ingress](#ingress)
-  - [Egress](#egress)
-  - [Security](#security)
-  - [Monitoring and Observability](#monitoring-and-observability)
-  - [Auto-Upgrade and Maintenance](#auto-upgrade-and-maintenance)
-  - [Scaling](#scaling)
-  - [Storage](#storage)
-  - [Policy Enforcement](#policy-enforcement)
-- [Preconfigured vs Fine-Tunable](#preconfigured-vs-fine-tunable)
-- [Terraform Guardrails](#terraform-guardrails)
-- [BYO VNet Topology](#byo-vnet-topology)
-- [Azure Landing Zone Caveats](#azure-landing-zone-caveats)
-  - [VNet and Subnet Ownership](#vnet-and-subnet-ownership)
-  - [CIDR Coordination](#cidr-coordination)
-  - [Private DNS Zone Management](#private-dns-zone-management)
-  - [Egress Through Hub Firewall](#egress-through-hub-firewall)
-  - [Azure Policy Conflicts](#azure-policy-conflicts)
-  - [azapi vs AVM Compatibility](#azapi-vs-avm-compatibility)
-  - [RBAC and Identity Requirements](#rbac-and-identity-requirements)
-  - [Monitoring Integration](#monitoring-integration)
-- [Terraform Module Structure](#terraform-module-structure)
+- [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
 - [Deployment Scenarios](#deployment-scenarios)
-- [Regional Availability and Limitations](#regional-availability-and-limitations)
+- [Connect to the Cluster](#connect-to-the-cluster)
+
+### Architecture
+- [AKS Automatic vs AKS Standard](#aks-automatic-vs-aks-standard)
+- [ALZ Corp Architecture Diagram](#alz-corp-architecture-diagram)
+- [Traffic Flows](#traffic-flows)
+- [BYO VNet Topology](#byo-vnet-topology)
+
+### Security and Guardrails
+- [AKS Automatic Platform Guardrails](#aks-automatic-platform-guardrails)
+- [Terraform Module Guardrails](#terraform-module-guardrails)
+
+### AKS Automatic Components
+- [SKU and Cluster Tier](#sku-and-cluster-tier)
+- [Node Provisioning (Karpenter)](#node-provisioning-karpenter)
+- [Networking](#networking)
+- [Ingress](#ingress)
+- [Egress](#egress)
+- [Security](#security)
+- [Monitoring and Observability](#monitoring-and-observability)
+- [Preconfigured vs Fine-Tunable](#preconfigured-vs-fine-tunable)
+
+### ALZ Corp Integration
+- [Azure Landing Zone Caveats](#azure-landing-zone-caveats)
+- [Azure Policy Conflicts](#azure-policy-conflicts)
+- [RBAC and Identity Requirements](#rbac-and-identity-requirements)
+
+### Module Reference
+- [Terraform Module Structure](#terraform-module-structure)
+
+### Additional Documentation
+- [Day-2 Operations](docs/day2-operations.md)
+- [ArgoCD Bootstrap](docs/argocd/README.md)
+- [Regional Availability](docs/regional-availability.md)
+- [Networking: Cilium vs Cilium Enterprise](docs/networking-cilium.md)
 - [References](#references)
 
 ---
@@ -53,6 +60,46 @@ The module supports:
 - HTTP proxy support for TLS-intercepting proxy environments ([docs](https://learn.microsoft.com/azure/aks/http-proxy))
 - Microsoft Defender for Containers ([docs](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction))
 - Terraform guardrails: `prevent_destroy` lifecycle, input validation, cross-variable preconditions
+
+---
+
+## Quick Start
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars for your environment
+
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+
+## Prerequisites
+
+**Tools:**
+- Terraform >= 1.9
+- Azure CLI authenticated (`az login`)
+- azapi provider (downloaded automatically by `terraform init`)
+
+**Azure subscription requirements:**
+- Subscription quota for 16+ vCPUs of D-series VMs in the target region
+- Region must support API Server VNet Integration (GA in all public regions except `qatarcentral`)
+- `Microsoft.PolicyInsights` resource provider registered
+
+**Before `terraform apply` (ALZ Corp):**
+- **Remote backend:** Configure an Azure Storage backend for state persistence and locking. This module uses `prevent_destroy` on critical resources; local state is not suitable for production. Create a `backend.tf` with your storage account details.
+- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), and PE subnet are pre-provisioned by the ALZ vending pipeline.
+- **Firewall rules:** When using `egress_type = "userDefinedRouting"`, the hub Azure Firewall must whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). The `AzureKubernetesService` FQDN tag covers most requirements.
+- **Private DNS zones:** For private clusters, ensure `private.<region>.azmk8s.io` Private DNS Zone exists in the connectivity subscription and is linked to the hub VNet.
+- **Cross-subscription RBAC (not managed by this module):**
+  - `Network Contributor` on the spoke VNet/subnets for the AKS cluster identity
+  - `Private DNS Zone Contributor` on referenced private DNS zones for Application Routing
+  - `DNS Zone Contributor` on referenced public DNS zones for Application Routing
+  - `Key Vault Certificate User` on any Key Vault used for TLS certs
+- **Log Analytics workspace:** Required when `enable_defender = true` or `enable_container_insights = true`. Pass the workspace resource ID via `log_analytics_workspace_id`.
+- **UserAssigned identity:** Required when `private_dns_zone_id` is a custom resource ID. Create a managed identity with `Private DNS Zone Contributor` on the zone and pass its resource ID via `user_assigned_identity_id`.
+- **CIDR coordination:** Verify that VNet, pod, and service CIDRs do not overlap with hub VNet, other spokes, or on-premises networks. See [CIDR Coordination](#cidr-coordination).
 
 ---
 
@@ -515,7 +562,23 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 
 ---
 
-## Terraform Guardrails
+## AKS Automatic Platform Guardrails
+
+AKS Automatic ships with built-in platform-level guardrails that are always active. These complement the Terraform-level guardrails below.
+
+| Guardrail | Mechanism | Configurable | Impact |
+|---|---|---|---|
+| Deployment Safeguards | Azure Policy (Warning mode by default) | Yes - severity changeable to Enforcement via Policy | Prevents unsafe pod specs before deployment |
+| Cilium Network Policies | eBPF-based L3/L4/L7 enforcement | Yes - via `CiliumNetworkPolicy` CRDs | Enforces pod-to-pod and external traffic rules |
+| Image Cleaner | Automatic unused image removal | Yes - `image_cleaner_interval_hours` (min 24h) | Prevents stale vulnerable images on nodes |
+| Azure RBAC | Kubernetes API auth via Entra ID | No - preconfigured, local accounts disabled | All cluster access requires Entra ID identity |
+| Workload Identity + OIDC | Federated token credentials for pods | No - preconfigured | Pods authenticate to Azure services without secrets |
+| ReadOnly Node Resource Group | ARM lock on MC_ resource group | No - preconfigured | Prevents manual tampering with AKS-managed infra |
+| API Server VNet Integration | API server as ILB in delegated subnet | No - preconfigured (BYO VNet) | No public kube-apiserver endpoint in BYO VNet mode |
+| Auto-Upgrade | Cluster and node OS patching | Yes - `upgrade_channel`, `node_os_upgrade_channel` | Cluster stays on supported Kubernetes versions |
+| CNI Overlay + Cilium | Azure CNI with non-routable pod CIDR | No - preconfigured | Pod IPs don't consume VNet address space |
+
+## Terraform Module Guardrails
 
 This module includes several Terraform-level safeguards to prevent misconfigurations and accidental data loss. These complement the Azure-side guardrails (Deployment Safeguards, Azure Policy) that AKS Automatic enables by default.
 
@@ -824,43 +887,15 @@ The azapi provider communicates directly with the Azure Resource Manager REST AP
 
 ## Deployment Scenarios
 
-### Prerequisites
-
-**Tools:**
-- Terraform >= 1.9
-- Azure CLI authenticated (`az login`)
-- azapi provider (downloaded automatically by `terraform init`)
-
-**Azure subscription requirements:**
-- Subscription quota for 16+ vCPUs of D-series VMs in the target region
-- Region must support API Server VNet Integration (GA in all public regions except `qatarcentral`)
-- `Microsoft.PolicyInsights` resource provider registered
-
-**Before `terraform apply` (ALZ Corp):**
-- **Remote backend:** Configure an Azure Storage backend for state persistence and locking. This module uses `prevent_destroy` on critical resources; local state is not suitable for production. Create a `backend.tf` with your storage account details.
-- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), and PE subnet are pre-provisioned by the ALZ vending pipeline.
-- **Firewall rules:** When using `egress_type = "userDefinedRouting"`, the hub Azure Firewall must whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). The `AzureKubernetesService` FQDN tag covers most requirements.
-- **Private DNS zones:** For private clusters, ensure `private.<region>.azmk8s.io` Private DNS Zone exists in the connectivity subscription and is linked to the hub VNet.
-- **Cross-subscription RBAC (not managed by this module):**
-  - `Network Contributor` on the spoke VNet/subnets for the AKS cluster identity
-  - `Private DNS Zone Contributor` on referenced private DNS zones for Application Routing
-  - `DNS Zone Contributor` on referenced public DNS zones for Application Routing
-  - `Key Vault Certificate User` on any Key Vault used for TLS certs
-- **Log Analytics workspace:** Required when `enable_defender = true` or `enable_container_insights = true`. Pass the workspace resource ID via `log_analytics_workspace_id`.
-- **UserAssigned identity:** Required when `private_dns_zone_id` is a custom resource ID. Create a managed identity with `Private DNS Zone Contributor` on the zone and pass its resource ID via `user_assigned_identity_id`.
-- **CIDR coordination:** Verify that VNet, pod, and service CIDRs do not overlap with hub VNet, other spokes, or on-premises networks. See [CIDR Coordination](#cidr-coordination).
-
-### Quick Start
-
-```bash
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars for your environment
-
-terraform init
-terraform validate
-terraform plan
-terraform apply
-```
+| Scenario | Use when | Key inputs |
+|---|---|---|
+| External Subnets + UDR | ALZ vending pre-created subnets | `external_*_subnet_id`, `firewall_private_ip` |
+| BYO VNet + UDR | Module creates spoke VNet/subnets | `enable_byo_vnet = true`, `firewall_private_ip` |
+| Managed VNet | Dev/test, non-ALZ environments | `enable_byo_vnet = false` |
+| Private Cluster | No public API server exposure | `enable_private_cluster = true` |
+| App Routing + DNS | Managed ingress + DNS integration | `dns_zone_resource_ids` |
+| HTTP Proxy | Forced outbound proxy/TLS interception | `http_proxy_config` |
+| Defender | Runtime threat detection | `enable_defender`, `log_analytics_workspace_id` |
 
 ### Scenario 1: External Subnets + UDR through Hub Firewall (Corp default)
 
@@ -927,109 +962,6 @@ log_analytics_workspace_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers
 az aks get-credentials --resource-group rg-aks-automatic --name aks-automatic
 kubectl get nodes
 ```
-
----
-
-## Usage Example
-
-The following shows the core `main.tf` AKS Automatic resource as deployed by this module. This is the actual azapi resource body. This is a simplified subset; see main.tf for the full implementation including Istio, Defender, HTTP proxy, and cost analysis.
-
-```hcl
-resource "azapi_resource" "aks" {
-  type      = "Microsoft.ContainerService/managedClusters@2025-05-01"
-  name      = var.cluster_name
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
-  tags      = local.tags
-
-  identity {
-    type = "SystemAssigned"
-  }
-
-  body = {
-    sku = {
-      name = "Automatic"
-      tier = "Standard"
-    }
-
-    properties = {
-      kubernetesVersion = var.kubernetes_version
-
-      nodeProvisioningProfile = {
-        mode = "Auto"    # Karpenter-based, mandatory for Automatic
-      }
-
-      agentPoolProfiles = [
-        {
-          name         = "systempool"
-          mode         = "System"
-          osType       = "Linux"
-          osSKU        = "AzureLinux"
-          vnetSubnetID = local.node_subnet_id  # null when using managed VNet
-        }
-      ]
-
-      networkProfile = {
-        networkPlugin     = "azure"
-        networkPluginMode = "overlay"
-        networkDataplane  = "cilium"
-        networkPolicy     = "cilium"
-        loadBalancerSku   = "standard"
-        outboundType      = local.outbound_type
-        podCidr           = var.pod_cidr
-        serviceCidr       = var.service_cidr
-        dnsServiceIP      = var.dns_service_ip
-      }
-
-      apiServerAccessProfile = {
-        enableVnetIntegration          = true
-        subnetId                       = local.apiserver_subnet_id
-        enablePrivateCluster           = var.enable_private_cluster
-        enablePrivateClusterPublicFQDN = var.enable_private_cluster ? false : null
-        privateDNSZone                 = var.enable_private_cluster ? (
-          var.private_dns_zone_id != null ? var.private_dns_zone_id : "system"
-        ) : null
-        authorizedIPRanges = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
-      }
-
-      ingressProfile = {
-        webAppRouting = {
-          enabled            = true
-          dnsZoneResourceIds = local.dns_zone_ids
-        }
-      }
-
-      securityProfile = {
-        workloadIdentity = { enabled = true }
-        imageCleaner     = { enabled = true, intervalHours = var.image_cleaner_interval_hours }
-      }
-
-      oidcIssuerProfile    = { enabled = true }
-      aadProfile           = { enableAzureRBAC = true, managed = true }
-      enableRBAC           = true
-      disableLocalAccounts = true
-
-      autoUpgradeProfile = {
-        upgradeChannel       = var.upgrade_channel
-        nodeOSUpgradeChannel = var.node_os_upgrade_channel
-      }
-
-      azureMonitorProfile       = { metrics = { enabled = var.enable_prometheus } }
-      workloadAutoScalerProfile = { keda = { enabled = true }, verticalPodAutoscaler = { enabled = true } }
-      storageProfile            = {
-        diskCSIDriver      = { enabled = true }
-        fileCSIDriver      = { enabled = true }
-        blobCSIDriver      = { enabled = false }
-        snapshotController = { enabled = true }
-      }
-
-      nodeResourceGroupProfile = { restrictionLevel = "ReadOnly" }
-    }
-  }
-}
-```
-
-See `main.tf` for the full implementation including Istio service mesh and response export values.
 
 ---
 
