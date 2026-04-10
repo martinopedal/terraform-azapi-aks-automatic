@@ -320,12 +320,16 @@ variable "private_dns_zone_id" {
       - null (default) : AKS creates a private.<region>.azmk8s.io zone in the node resource group (privateDNSZone = "system").
       - "<resource-id>": Use a pre-created zone, e.g. in the ALZ connectivity subscription.
         Format: private.<region>.azmk8s.io.
-        NOTE: Custom zones require a UserAssigned managed identity. This module uses
-        SystemAssigned, so custom zone IDs will cause Azure to reject the deployment.
-        Extend main.tf identity block to UserAssigned before using this option.
+        Requires user_assigned_identity_id to be set.
       - "none"         : No private DNS zone. The module automatically enables the
         public FQDN in this case so the API server remains reachable.
   EOT
+  type        = string
+  default     = null
+}
+
+variable "user_assigned_identity_id" {
+  description = "Resource ID of a pre-created UserAssigned managed identity. Required when private_dns_zone_id is a custom resource ID. The identity must have Private DNS Zone Contributor on the referenced zone."
   type        = string
   default     = null
 }

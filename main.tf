@@ -33,11 +33,11 @@ resource "azapi_resource" "aks" {
   parent_id = azapi_resource.rg.id
   tags      = local.tags
 
-  # SystemAssigned is the default for this module. If you set a custom
-  # privateDNSZone resource ID for a private cluster, AKS requires a
-  # UserAssigned managed identity plus the corresponding identity resource ID.
+  # Identity type is determined by whether a custom private DNS zone is used.
+  # Custom private DNS zones require UserAssigned identity; otherwise SystemAssigned.
   identity {
-    type = "SystemAssigned"
+    type         = local.use_user_assigned_identity ? "UserAssigned" : "SystemAssigned"
+    identity_ids = local.use_user_assigned_identity ? [var.user_assigned_identity_id] : null
   }
 
   body = {
@@ -271,9 +271,10 @@ resource "azapi_resource" "aks" {
         var.enable_private_cluster &&
         var.private_dns_zone_id != null &&
         var.private_dns_zone_id != "system" &&
-        var.private_dns_zone_id != "none"
+        var.private_dns_zone_id != "none" &&
+        var.user_assigned_identity_id == null
       )
-      error_message = "Custom private_dns_zone_id requires a UserAssigned managed identity. This module uses SystemAssigned. Use null (system-managed), 'system', or 'none', or extend the identity block to UserAssigned before setting a custom zone resource ID."
+      error_message = "user_assigned_identity_id is required when private_dns_zone_id is a custom resource ID. Provide the resource ID of a UserAssigned managed identity with Private DNS Zone Contributor on the zone."
     }
 
     precondition {
