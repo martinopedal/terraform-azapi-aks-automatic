@@ -306,3 +306,31 @@ resource "azapi_resource" "aks" {
     }
   }
 }
+
+# =============================================================================
+# Maintenance Window Configuration
+# =============================================================================
+
+resource "azapi_resource" "maintenance_config" {
+  count     = var.maintenance_window != null ? 1 : 0
+  type      = "Microsoft.ContainerService/managedClusters/maintenanceConfigurations@2024-09-01"
+  name      = "default"
+  parent_id = azapi_resource.aks.id
+
+  body = {
+    properties = {
+      maintenanceWindow = {
+        schedule = {
+          weekly = var.maintenance_window.day_of_week != null ? {
+            dayOfWeek     = var.maintenance_window.day_of_week
+            intervalWeeks = var.maintenance_window.interval_weeks
+          } : null
+        }
+        durationHours   = var.maintenance_window.duration_hours
+        startTime       = var.maintenance_window.start_time
+        utcOffset       = var.maintenance_window.utc_offset
+        notAllowedDates = var.maintenance_window.not_allowed_dates
+      }
+    }
+  }
+}

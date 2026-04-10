@@ -393,6 +393,26 @@ variable "node_os_upgrade_channel" {
   }
 }
 
+variable "maintenance_window" {
+  description = <<-EOT
+    Maintenance window configuration for the AKS cluster. Controls when
+    auto-upgrades and node OS updates are applied. Set to null (default)
+    to let AKS choose the maintenance window.
+  EOT
+  type = object({
+    day_of_week    = optional(string, "Wednesday")
+    interval_weeks = optional(number, 1)
+    duration_hours = optional(number, 4)
+    start_time     = optional(string, "03:00")
+    utc_offset     = optional(string, "+00:00")
+    not_allowed_dates = optional(list(object({
+      start = string
+      end   = string
+    })), [])
+  })
+  default = null
+}
+
 # =============================================================================
 # HTTP Proxy
 # =============================================================================
