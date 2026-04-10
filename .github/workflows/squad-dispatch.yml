@@ -71,7 +71,8 @@ jobs:
             }
 
             if (matched.length === 0 && labels.includes('squad')) {
-              // Generic squad issue, suggest all tools
+              // Generic squad issue without a specific domain label.
+              // Suggest style and doc tools as a starting point.
               matched.push({
                 extension: 'style-guard',
                 tool: 'style_check',

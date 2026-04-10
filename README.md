@@ -803,7 +803,10 @@ terraform-azapi-aks-automatic/
 ├── SECURITY.md               # Security policy
 ├── .gitignore
 ├── .github/
-│   └── copilot-instructions.md
+│   ├── copilot-instructions.md
+│   ├── extensions/              # Squad tools (see SQUAD.md)
+│   ├── ISSUE_TEMPLATE/
+│   └── workflows/
 ├── docs/
 │   ├── alz-corp-aks-automatic.drawio
 │   ├── alz-corp-aks-automatic.drawio.png
@@ -822,6 +825,8 @@ terraform-azapi-aks-automatic/
 | `main.tf` | Resource group (azapi) + AKS Automatic cluster (azapi) |
 | `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs, identity principals |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise |
+
+For squad extensions, CI/CD workflows, and issue templates, see [SQUAD.md](SQUAD.md).
 
 ### Why azapi
 
