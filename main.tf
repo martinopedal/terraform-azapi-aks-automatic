@@ -345,3 +345,109 @@ resource "azapi_resource" "maintenance_config" {
     }
   }
 }
+
+# =============================================================================
+# Prometheus Alert Rules
+# =============================================================================
+
+resource "azapi_resource" "prometheus_alerts" {
+  count     = var.enable_prometheus_alerts ? 1 : 0
+  type      = "Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01"
+  name      = "${var.cluster_name}-alerts"
+  location  = azapi_resource.rg.location
+  parent_id = azapi_resource.rg.id
+  tags      = local.tags
+
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      clusterName = azapi_resource.aks.name
+      description = "Recommended AKS cluster health alerts"
+      enabled     = true
+      interval    = "PT1M"
+      scopes      = [var.azure_monitor_workspace_id]
+      rules = [
+        {
+          alert      = "KubeNodeNotReady"
+          enabled    = true
+          expression = "kube_node_status_condition{condition=\"Ready\",status=\"true\"} == 0"
+          for        = "PT5M"
+          severity   = 1
+          labels     = { severity = "critical" }
+          annotations = {
+            summary     = "Node {{ $labels.node }} is not ready"
+            description = "Node has been in NotReady state for more than 5 minutes."
+          }
+        },
+        {
+          alert      = "KubePodCrashLooping"
+          enabled    = true
+          expression = "increase(kube_pod_container_status_restarts_total[1h]) > 5"
+          for        = "PT15M"
+          severity   = 2
+          labels     = { severity = "high" }
+          annotations = {
+            summary     = "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+            description = "Pod has restarted more than 5 times in the last hour."
+          }
+        },
+        {
+          alert      = "KubePVCAlmostFull"
+          enabled    = true
+          expression = "kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9"
+          for        = "PT10M"
+          severity   = 2
+          labels     = { severity = "high" }
+          annotations = {
+            summary     = "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is >90% full"
+            description = "Persistent volume claim is running out of space."
+          }
+        },
+        {
+          alert      = "KubeContainerOOMKilled"
+          enabled    = true
+          expression = "kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\"} > 0"
+          for        = "PT5M"
+          severity   = 2
+          labels     = { severity = "high" }
+          annotations = {
+            summary     = "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was OOM killed"
+            description = "Container was terminated due to out-of-memory. Consider increasing memory limits."
+          }
+        },
+        {
+          alert      = "KubeDeploymentReplicasMismatch"
+          enabled    = true
+          expression = "kube_deployment_spec_replicas != kube_deployment_status_ready_replicas"
+          for        = "PT15M"
+          severity   = 2
+          labels     = { severity = "high" }
+          annotations = {
+            summary     = "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has replica mismatch"
+            description = "Deployment does not have the expected number of ready replicas for over 15 minutes."
+          }
+        },
+        {
+          alert      = "KubeJobFailed"
+          enabled    = true
+          expression = "kube_job_status_failed > 0"
+          for        = "PT5M"
+          severity   = 3
+          labels     = { severity = "medium" }
+          annotations = {
+            summary     = "Job {{ $labels.namespace }}/{{ $labels.job_name }} failed"
+            description = "Kubernetes job has failed."
+          }
+        }
+      ]
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_prometheus_alerts || var.azure_monitor_workspace_id != null
+      error_message = "azure_monitor_workspace_id is required when enable_prometheus_alerts = true."
+    }
+  }
+}
