@@ -8,6 +8,7 @@
 - [Prerequisites](#prerequisites)
 - [Deployment Scenarios](#deployment-scenarios)
 - [Connect to the Cluster](#connect-to-the-cluster)
+- [Post-Deployment Checklist](#post-deployment-checklist)
 
 ### Architecture
 - [AKS Automatic vs AKS Standard](#aks-automatic-vs-aks-standard)
@@ -962,6 +963,37 @@ log_analytics_workspace_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers
 az aks get-credentials --resource-group rg-aks-automatic --name aks-automatic
 kubectl get nodes
 ```
+
+---
+
+## Post-Deployment Checklist
+
+After `terraform apply` completes, these steps finalize the cluster for production use.
+
+### Required
+
+| Step | Command / Action | When needed |
+|---|---|---|
+| Connect to cluster | `az aks get-credentials --resource-group <rg> --name <cluster>` | Always |
+| Verify nodes | `kubectl get nodes` - confirm nodes are Ready across availability zones | Always |
+| Cross-subscription RBAC | Grant `Network Contributor`, `Private DNS Zone Contributor`, `Key Vault Certificate User` to AKS identity | ALZ Corp (not managed by this module) |
+| Import ArgoCD images to ACR | `az acr import --name <acr> --source quay.io/argoproj/argocd:v2.13.2` | If using ArgoCD |
+| Bootstrap ArgoCD | Apply manifests from [docs/argocd/](docs/argocd/README.md) | If using ArgoCD |
+| Create Karpenter NodePools | Apply `NodePool` + `AKSNodeClass` CRDs for workload-specific node pools | When customizing node provisioning |
+| Configure Azure Backup | Install backup extension, create vault and policy | Production workloads |
+
+### Recommended
+
+| Step | Command / Action | When needed |
+|---|---|---|
+| Enable Prometheus alerts | Set `enable_prometheus_alerts = true` with `azure_monitor_workspace_id` | Production monitoring |
+| Apply CiliumNetworkPolicies | Deploy per-namespace egress/ingress restrictions | Zero-trust segmentation |
+| Configure maintenance windows | Set `maintenance_window` variable or use `az aks maintenanceconfiguration` | Control upgrade timing |
+| Review Azure Policy exemptions | Exempt system namespaces from conflicting ALZ policies | If ALZ policies block AKS system pods |
+| Set up Workload Identity | Create `ServiceAccount` + `FederatedIdentityCredential` per workload | Workloads accessing Azure services |
+| Configure cost analysis | Set `enable_cost_analysis = true` and review in Azure Cost Management | Cost tracking |
+
+For detailed guidance on each step, see [Day-2 Operations](docs/day2-operations.md).
 
 ---
 
