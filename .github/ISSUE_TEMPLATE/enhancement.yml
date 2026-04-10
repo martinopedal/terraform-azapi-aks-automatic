@@ -1,0 +1,16 @@
+name: Enhancement
+description: Suggest a general improvement or style fix.
+labels: ["enhancement", "squad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Recommended squad:** `style-guard` (`style_check`)
+        Enforces style rules (emojis, dashes, AI language).
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What improvement or enhancement is needed?
+    validations:
+      required: true
