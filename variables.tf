@@ -367,6 +367,18 @@ variable "enable_container_insights" {
   default     = false
 }
 
+variable "azure_monitor_workspace_id" {
+  description = "Resource ID of the Azure Monitor workspace for Prometheus metrics and alert rules. Required when enable_prometheus_alerts = true."
+  type        = string
+  default     = null
+}
+
+variable "enable_prometheus_alerts" {
+  description = "Create recommended Prometheus alert rules for AKS cluster health monitoring. Requires azure_monitor_workspace_id."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Security
 # =============================================================================

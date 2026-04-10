@@ -362,9 +362,46 @@ This module enables Managed Prometheus metrics and optionally Container Insights
 | PVC nearly full | ``kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9`` | High |
 | API server latency | ``histogram_quantile(0.99, rate(apiserver_request_duration_seconds_bucket[5m])) > 1`` | High |
 
-Create these as PrometheusRuleGroups in the Azure Monitor workspace, or use the AKS recommended alert rules via the Azure portal.
+Create these as PrometheusRuleGroups in the Azure Monitor workspace, or use the AKS recommended alert rules via the Azure portal. This module can deploy these automatically with `enable_prometheus_alerts = true` and `azure_monitor_workspace_id`.
 
 For ALZ Corp with Azure Monitor Baseline Alerts (AMBA), review whether AMBA's AKS rules are compatible with the Managed Prometheus data source.
+
+### Azure Monitor Baseline Alerts (AMBA) for AKS
+
+[AMBA](https://azure.github.io/azure-monitor-baseline-alerts/) is a set of recommended Azure Monitor alerts delivered via Azure Policy, designed for ALZ environments. AMBA deploys alerts automatically using `DeployIfNotExists` policies at the management group level.
+
+**How AMBA and this module's alerts interact:**
+
+- AMBA deploys **metric-based** alerts (Azure Monitor metrics: CPU %, memory %, node count) via Azure Policy
+- This module deploys **PromQL-based** alerts (Managed Prometheus: pod crashes, OOM kills, PVC capacity) via `azapi_resource`
+- They are **complementary**, not duplicative. Use both for full coverage.
+
+**Enabling AMBA for your AKS landing zone:**
+
+1. **ALZ Portal Accelerator:** If deploying ALZ via the [Portal Accelerator](https://aka.ms/alz/portal), select "Monitoring and Baseline Alerts" during setup. AMBA policies are assigned at the management group level automatically.
+
+2. **Terraform (AVM Platform Landing Zone module):** If using the [AVM Platform Landing Zone module](https://aka.ms/alz/acc/tf), AMBA policies are included as policy assignments. Ensure the `Monitoring` management group policies are assigned to the Corp subscription scope.
+
+3. **Manual Policy assignment:**
+   ```bash
+   # Assign the AMBA AKS initiative at subscription scope
+   az policy assignment create \
+     --name "amba-aks" \
+     --scope "/subscriptions/<sub-id>" \
+     --policy-set-definition "/providers/Microsoft.Authorization/policySetDefinitions/ContainerService" \
+     --params '{"logAnalyticsWorkspaceId": {"value": "<workspace-id>"}}'
+   ```
+
+4. **Enterprise Policy as Code (EPAC):** For large-scale environments, integrate AMBA with [EPAC](https://github.com/Azure/enterprise-azure-policy-as-code) for version-controlled policy management.
+
+**AKS Automatic compatibility notes:**
+
+- AMBA's `Deploy-Diag-LogsCat` policy auto-deploys diagnostic settings on resources missing them. This complements `enable_container_insights` in this module.
+- AMBA metric alerts use Azure Monitor metrics (not Prometheus). They work independently of `enable_prometheus`.
+- Review AMBA alert thresholds against your AKS Automatic workload patterns. NAP/Karpenter's dynamic node provisioning may trigger node count alerts during scale-up events. Consider adjusting thresholds or adding suppression rules for expected autoscaling behaviour.
+- Data Collection Rules (DCRs) for Prometheus must be regionally co-located with the Azure Monitor workspace. Multi-region deployments require separate DCRs per region.
+
+For the full AMBA documentation, see [azure.github.io/azure-monitor-baseline-alerts](https://azure.github.io/azure-monitor-baseline-alerts/).
 
 ### Cost Optimization with Reserved Instances
 
