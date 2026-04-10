@@ -294,9 +294,10 @@ resource "azapi_resource" "aks" {
 
     precondition {
       condition = (
-        var.http_proxy_config == null ||
-        var.http_proxy_config.http_proxy != null ||
-        var.http_proxy_config.https_proxy != null
+        var.http_proxy_config == null ? true : (
+          var.http_proxy_config.http_proxy != null ||
+          var.http_proxy_config.https_proxy != null
+        )
       )
       error_message = "http_proxy_config requires at least one of http_proxy or https_proxy to be set."
     }
