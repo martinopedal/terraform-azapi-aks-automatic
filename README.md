@@ -803,7 +803,21 @@ terraform-azapi-aks-automatic/
 ├── SECURITY.md               # Security policy
 ├── .gitignore
 ├── .github/
-│   └── copilot-instructions.md
+│   ├── copilot-instructions.md
+│   ├── extensions/              # Squad extensions (8 Copilot CLI tools)
+│   │   ├── aks-feature-tracker/
+│   │   ├── alz-checker/
+│   │   ├── doc-checker/
+│   │   ├── network-architect/
+│   │   ├── security-reviewer/
+│   │   ├── style-guard/
+│   │   ├── terraform-engineer/
+│   │   └── terraform-validator/
+│   ├── ISSUE_TEMPLATE/          # Issue templates per squad domain
+│   └── workflows/
+│       ├── copilot-setup-steps.yml
+│       ├── squad-dispatch.yml
+│       └── validate.yml
 ├── docs/
 │   ├── alz-corp-aks-automatic.drawio
 │   ├── alz-corp-aks-automatic.drawio.png
