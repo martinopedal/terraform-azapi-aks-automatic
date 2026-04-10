@@ -73,9 +73,9 @@ jobs:
           scan-ref: .
           format: sarif
           output: trivy-results.sarif
-          # Trivy scans HCL for misconfigurations and secrets.
-          # Like Checkov, azapi_resource ARM body is not deeply analysed.
           severity: CRITICAL,HIGH,MEDIUM
+          skip-dirs: docs/argocd
+          trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF
         if: always()
