@@ -53,13 +53,13 @@ output "app_routing_identity_object_id" {
 }
 
 output "cluster_identity_principal_id" {
-  description = "Principal ID of the cluster SystemAssigned managed identity. Use for cross-subscription RBAC assignments (Network Contributor, Private DNS Zone Contributor)."
-  value       = azapi_resource.aks.identity[0].principal_id
+  description = "Principal ID of the cluster managed identity (SystemAssigned or UserAssigned). Use for cross-subscription RBAC assignments (Network Contributor, Private DNS Zone Contributor)."
+  value       = local.use_user_assigned_identity ? try(azapi_resource.aks.output.identity.userAssignedIdentities[var.user_assigned_identity_id].principalId, null) : try(azapi_resource.aks.identity[0].principal_id, null)
 }
 
 output "cluster_identity_tenant_id" {
-  description = "Tenant ID of the cluster SystemAssigned managed identity."
-  value       = azapi_resource.aks.identity[0].tenant_id
+  description = "Tenant ID of the cluster managed identity."
+  value       = try(azapi_resource.aks.identity[0].tenant_id, null)
 }
 
 # =============================================================================
