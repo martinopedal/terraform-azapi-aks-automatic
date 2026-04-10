@@ -11,6 +11,7 @@
   - [SKU and Cluster Tier](#sku-and-cluster-tier)
   - [Node Provisioning (Karpenter)](#node-provisioning-karpenter)
   - [Networking](#networking)
+  - [HTTP Proxy](#http-proxy)
   - [Ingress](#ingress)
   - [Egress](#egress)
   - [Security](#security)
@@ -20,6 +21,7 @@
   - [Storage](#storage)
   - [Policy Enforcement](#policy-enforcement)
 - [Preconfigured vs Fine-Tunable](#preconfigured-vs-fine-tunable)
+- [Terraform Guardrails](#terraform-guardrails)
 - [BYO VNet Topology](#byo-vnet-topology)
 - [Azure Landing Zone Caveats](#azure-landing-zone-caveats)
   - [VNet and Subnet Ownership](#vnet-and-subnet-ownership)
@@ -48,6 +50,9 @@ The module supports:
 - Three ingress options: Application Gateway for Containers, Application Routing add-on, Istio
 - Private cluster with VNet-integrated API server
 - Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
+- HTTP proxy support for TLS-intercepting proxy environments ([docs](https://learn.microsoft.com/azure/aks/http-proxy))
+- Microsoft Defender for Containers ([docs](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction))
+- Terraform guardrails: `prevent_destroy` lifecycle, input validation, cross-variable preconditions
 
 ---
 
@@ -212,6 +217,39 @@ AKS Automatic uses **Azure CNI Overlay powered by Cilium** with eBPF-based data 
 | VNet | Managed (auto-created) | Yes - BYO VNet supported |
 | Outbound type | `managedNATGateway` | Yes - see [Egress](#egress) |
 | Service mesh | Not enabled | Yes - `serviceMeshProfile` for Istio |
+| HTTP proxy | Not configured | Yes - `http_proxy_config` (see [HTTP Proxy](#http-proxy)) |
+
+### HTTP Proxy
+
+AKS supports [HTTP proxy configuration](https://learn.microsoft.com/azure/aks/http-proxy) for clusters deployed in environments where outbound internet access must route through a forward proxy. When configured, both nodes and pods receive the `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables automatically.
+
+This module exposes the `http_proxy_config` variable, which maps to the ARM `httpProxyConfig` property:
+
+| Field | Description |
+|---|---|
+| `http_proxy` | Proxy URL for HTTP connections (scheme must be `http`) |
+| `https_proxy` | Proxy URL for HTTPS connections (falls back to `http_proxy` if not set) |
+| `no_proxy` | List of destination domains, IPs, or CIDRs to exclude from proxying |
+| `trusted_ca` | Base64-encoded PEM CA certificate bundle for TLS-intercepting proxies |
+
+```hcl
+http_proxy_config = {
+  http_proxy  = "http://proxy.corp.contoso.com:8080"
+  https_proxy = "http://proxy.corp.contoso.com:8080"
+  no_proxy    = ["localhost", "127.0.0.1", "168.63.129.16", "10.0.0.0/8", "172.16.0.0/12"]
+  trusted_ca  = "LS0tLS1CRUdJTi..."
+}
+```
+
+**Limitations ([source](https://learn.microsoft.com/azure/aks/http-proxy#limitations-and-considerations)):**
+
+- All node pools share the same proxy configuration (per-pool proxy is not supported)
+- Windows node pools are not supported (not applicable to AKS Automatic, which is Linux-only)
+- User/password authentication is not supported
+- Custom CAs for API server communication are not supported
+- The `trustedCa` certificate must include Subject Alternative Names (SANs)
+
+**Corp considerations:** When using UDR egress through a hub firewall that also acts as a TLS-intercepting proxy, set `trusted_ca` to the proxy CA certificate bundle so that nodes can validate the intercepted TLS connections. Add the firewall IP and Azure metadata endpoint (`168.63.129.16`) to `no_proxy`.
 
 ### Ingress
 
@@ -377,11 +415,12 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Workload Identity | Entra Workload ID | No |
 | OIDC Issuer | Enabled | No |
 | API server VNet integration | Enabled | No |
-| Image Cleaner | Enabled, default 7-day interval | Yes - `image_cleaner_interval_hours` |
+| Image Cleaner | Enabled, default 7-day interval | Yes - `image_cleaner_interval_hours` (minimum 24) |
 | Deployment Safeguards | Azure Policy, Warning mode | No (severity adjustable via Policy) |
-| Defender for Containers | Optional | Yes - `securityProfile.defender` |
-| Azure Key Vault KMS | Optional | Yes - `securityProfile.azureKeyVaultKms` |
+| Defender for Containers | Optional | Yes - `enable_defender` + `log_analytics_workspace_id` |
+| Azure Key Vault KMS | Optional | Yes - `securityProfile.azureKeyVaultKms` (not yet wired in this module) |
 | Custom CA trust certs | Optional, up to 10 | Conditional - see caveat below |
+| Key Vault purge protection | Enabled by default | Yes - `enable_purge_protection` (irreversible once enabled) |
 | Private cluster | Optional | Yes - `enable_private_cluster` |
 | Authorised IP ranges | Optional | Yes - `authorized_ip_ranges` |
 
@@ -394,8 +433,8 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Managed Prometheus | Enabled (CLI/Portal) | Yes - `enable_prometheus` |
 | Container Insights | Enabled (CLI/Portal) | Yes |
 | Azure Monitor Dashboards | Built-in via portal | Yes - link Managed Grafana |
-| ACNS network observability | Not enabled | Yes - `advancedNetworking` |
-| Cost analysis | Not enabled | Yes - `metricsProfile.costAnalysis` |
+| ACNS network observability | Not enabled | Yes - `advancedNetworking` (not yet wired in this module) |
+| Cost analysis | Not enabled | Yes - `enable_cost_analysis` |
 
 ### Auto-Upgrade and Maintenance
 
@@ -404,7 +443,7 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 | Cluster auto-upgrade | `stable` channel | Yes - `upgrade_channel` |
 | Node OS upgrade | `NodeImage` channel | Yes - `node_os_upgrade_channel` |
 | K8s API deprecation detection | Enabled | No |
-| Planned maintenance windows | Configurable | Yes - `maintenanceConfigurations` |
+| Planned maintenance windows | Configurable | Yes - `maintenanceConfigurations` (not yet wired in this module; use CLI) |
 
 ### Scaling
 
@@ -463,15 +502,70 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 | Kubernetes version | `kubernetes_version` |
 | Upgrade channels | `upgrade_channel`, `node_os_upgrade_channel` |
 | Maintenance windows | `maintenanceConfigurations` |
-| Networking | BYO VNet, pod/service CIDRs, DNS service IP |
+| Networking | BYO VNet, pod/service CIDRs, DNS service IP, HTTP proxy |
 | Egress | UDR through hub firewall (Corp default), Load Balancer (dev/test only) |
 | Ingress | AGC add-on, DNS zones for App Routing, Istio |
 | Private cluster | `enable_private_cluster`, `authorized_ip_ranges` |
-| Monitoring | Prometheus, Container Insights, Managed Grafana |
+| Monitoring | Prometheus, Container Insights, Managed Grafana, cost analysis |
 | Scaling | KEDA, VPA, HPA, autoscaler profile |
 | Storage | Disk/File/Blob CSI drivers, snapshot controller |
-| Security | Defender, Key Vault KMS, image cleaner interval, CA trust certs (requires AKS >= v20260408 for NAP) |
+| Security | Defender, Key Vault KMS, image cleaner interval, purge protection, CA trust certs (requires AKS >= v20260408 for NAP) |
+| HTTP proxy | `http_proxy_config` for TLS-intercepting proxy environments |
 | Node customisation | Karpenter `NodePool` / `AKSNodeClass` CRDs post-deployment |
+
+---
+
+## Terraform Guardrails
+
+This module includes several Terraform-level safeguards to prevent misconfigurations and accidental data loss. These complement the Azure-side guardrails (Deployment Safeguards, Azure Policy) that AKS Automatic enables by default.
+
+### Lifecycle Protection
+
+The AKS cluster and resource group resources include [`prevent_destroy`](https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle#prevent_destroy) lifecycle blocks. This prevents accidental deletion via `terraform destroy` or resource removal from configuration. To intentionally destroy protected resources, temporarily remove the lifecycle block or use `terraform state rm`.
+
+The AKS cluster also uses [`ignore_changes`](https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle#ignore_changes) on `kubernetesVersion` to prevent Terraform from reverting auto-upgrade version changes. When `upgrade_channel` is set (default: `stable`), AKS upgrades the cluster version automatically. Without `ignore_changes`, every subsequent `terraform plan` would show a diff and risk an unintended version change.
+
+### Input Validation
+
+All CIDR and IP address variables include `validation` blocks that verify correct format at `terraform plan` time, before any Azure API calls. The following validations are enforced:
+
+| Variable | Validation |
+|---|---|
+| `vnet_address_space`, `node_subnet_address_prefix`, `pe_subnet_address_prefix`, `pod_cidr`, `service_cidr` | Must be valid CIDR notation |
+| `apiserver_subnet_address_prefix` | Must be valid CIDR and /28 or larger |
+| `dns_service_ip` | Must be a valid IPv4 address (no CIDR mask) |
+| `acr_name` | 5-50 alphanumeric characters ([naming rules](https://learn.microsoft.com/azure/container-registry/container-registry-concepts#registry-name)) |
+| `keyvault_name` | 3-24 characters, start with letter, alphanumeric and hyphens ([naming rules](https://learn.microsoft.com/azure/key-vault/general/about-keys-secrets-certificates#objects-identifiers-and-versioning)) |
+| `image_cleaner_interval_hours` | Minimum 24 hours |
+| `egress_type` | Must be `userDefinedRouting` or `loadBalancer` |
+| `upgrade_channel` | Must be `rapid`, `stable`, `patch`, or `node-image` |
+| `node_os_upgrade_channel` | Must be `NodeImage`, `SecurityPatch`, `Unmanaged`, or `None` |
+
+### Cross-Variable Preconditions
+
+The module uses Terraform [`precondition`](https://developer.hashicorp.com/terraform/language/expressions/custom-conditions#preconditions-and-postconditions) blocks to catch invalid variable combinations before deployment:
+
+| Precondition | Error caught |
+|---|---|
+| External subnet IDs must be all-or-none | Setting `external_node_subnet_id` without `external_apiserver_subnet_id` (or vice versa) would produce a broken cluster payload |
+| Custom `private_dns_zone_id` blocked with SystemAssigned identity | Custom private DNS zones [require UserAssigned identity](https://learn.microsoft.com/azure/aks/private-clusters#configure-a-private-dns-zone); this module uses SystemAssigned |
+| `firewall_private_ip` required for UDR egress | Omitting the firewall IP when `egress_type = userDefinedRouting` would create a route table with no next hop |
+| `log_analytics_workspace_id` required for Defender | [Defender for Containers](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction) requires a Log Analytics workspace for security event storage |
+| `acr_name` required when `create_acr = true` | Prevents plan failure from missing required resource name |
+| `keyvault_name` required when `create_keyvault = true` | Prevents plan failure from missing required resource name |
+| PE subnet required for ACR/KV with public access disabled | ACR and Key Vault are created with `publicNetworkAccess = Disabled` and need a private endpoint subnet |
+
+### Security Defaults
+
+The module applies secure defaults that can be overridden when needed:
+
+| Default | Rationale | Override variable |
+|---|---|---|
+| Key Vault [purge protection](https://learn.microsoft.com/azure/key-vault/general/soft-delete-overview#purge-protection) enabled | Prevents permanent deletion of secrets during soft-delete retention. This setting is irreversible. | `enable_purge_protection` |
+| ACR [zone redundancy](https://learn.microsoft.com/azure/container-registry/zone-redundancy) enabled | Protects against single availability zone failures for container image pulls | `acr_zone_redundancy_enabled` |
+| ACR public access disabled | Forces all image pulls through private endpoints | N/A (always disabled) |
+| Key Vault public access disabled | Forces all secret/certificate access through private endpoints | N/A (always disabled) |
+| AKS local accounts disabled | Forces Azure RBAC authentication ([docs](https://learn.microsoft.com/azure/aks/manage-azure-rbac)) | N/A (preconfigured by AKS Automatic) |
 
 ---
 
@@ -601,12 +695,19 @@ ALZ assigns Azure Policies at the management group level. AKS Automatic preconfi
 
 **Known conflict areas:**
 
-| ALZ Policy | Conflict |
-|---|---|
-| `Kubernetes clusters should not allow container privilege escalation` | May block AKS system components |
-| `Kubernetes cluster should not allow privileged containers` | AKS system pods require privileges |
-| `Network policies should be enforced on AKS clusters` | Already enforced by Cilium but policy may not detect this |
-| Policies enforcing specific NSG rules | AKS injects its own NSG rules that may violate strict policies |
+| ALZ Policy | Conflict | Resolution |
+|---|---|---|
+| `Kubernetes clusters should not allow container privilege escalation` | May block AKS system components | Request exemption for `kube-system` namespace |
+| `Kubernetes cluster should not allow privileged containers` | AKS system pods require privileges | Request exemption for system DaemonSets |
+| `Network policies should be enforced on AKS clusters` | Already enforced by Cilium but policy may not detect this | Request exemption or update policy to recognise Cilium |
+| Policies enforcing specific NSG rules | AKS injects its own NSG rules that may violate strict policies | Request exemption on AKS node subnet |
+| `Deny-PublicEndpoints` / `Deny-PublicIP` | Blocks public endpoints on PaaS services | Module is compliant: ACR, Key Vault, and optionally AKS API server are private-only |
+| `Deploy-Diag-LogsCat` (DeployIfNotExists) | Auto-deploys diagnostic settings on resources missing them | Module does not create diagnostic settings; ALZ auto-remediation will add them. Pass `log_analytics_workspace_id` for Defender integration. |
+| Tag enforcement policies | May require specific tags (e.g. `costCenter`, `owner`) not included in defaults | Add required tags to the `tags` variable input |
+
+**Sources:**
+- [ALZ Policy assignments](https://github.com/Azure/Azure-Landing-Zones-Library/tree/main/platform/alz/policy_assignments)
+- [ALZ Policy documentation](https://azure.github.io/Azure-Landing-Zones/policy/)
 
 **Action:** Audit ALZ policy assignments before deploying:
 
@@ -644,7 +745,11 @@ In ALZ, these are cross-subscription RBAC assignments that must be managed by th
 
 ### Monitoring Integration
 
-ALZ deploys a central Log Analytics workspace in the management subscription. To forward AKS Container Insights and Prometheus data to the central workspace, the workspace resource ID must be added to the cluster's `azureMonitorProfile` or `addonProfiles`. This module does not currently wire central workspace integration. Extend `main.tf` if centralised logging is required.
+ALZ deploys a central Log Analytics workspace in the management subscription. This module accepts `log_analytics_workspace_id` as an input variable. When `enable_defender = true`, the workspace ID is passed to `securityProfile.defender.logAnalyticsWorkspaceResourceId` for [Defender for Containers](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction) security event storage.
+
+For Prometheus metrics and Container Insights log forwarding to a central workspace, additional configuration via `azureMonitorProfile` or `addonProfiles` is needed. This module enables Managed Prometheus (`enable_prometheus`) but does not currently wire a specific workspace target for log collection. Configure this via the Azure portal or CLI after deployment.
+
+When `enable_cost_analysis = true`, the module enables [AKS cost analysis](https://learn.microsoft.com/azure/aks/cost-analysis) via `metricsProfile.costAnalysis`, which provides per-namespace and per-workload cost breakdown in Azure Cost Management.
 
 ### If Using ALZ Subscription Vending with AVNM IPAM
 
@@ -680,7 +785,7 @@ If the ALZ platform uses the [AVM Subscription Vending module](https://github.co
 ```
 aks-automatic-azapi/
 ├── terraform.tf              # Terraform block, providers
-├── data.tf                   # Data sources (client config, subscription)
+├── data.tf                   # Data source (client config)
 ├── locals.tf                 # Computed values, conditional logic
 ├── variables.tf              # All input variables
 ├── network.tf                # BYO VNet resources (conditional)
@@ -697,7 +802,7 @@ aks-automatic-azapi/
 | File | Responsibility |
 |---|---|
 | `terraform.tf` | Terraform version constraint, azapi + azurerm provider declarations |
-| `data.tf` | Read-only data sources for Azure context |
+| `data.tf` | Read-only data source for Azure client configuration |
 | `locals.tf` | Derived values: network conditionals, subnet IDs, outbound type |
 | `variables.tf` | All configurable inputs with descriptions, types, defaults, validations |
 | `network.tf` | All BYO VNet resources, conditionally created when `enable_byo_vnet = true` |
@@ -777,6 +882,24 @@ firewall_private_ip    = "10.0.1.4"
 dns_zone_resource_ids = [
   "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/dnsZones/app.contoso.corp"
 ]
+```
+
+### Scenario 6: HTTP Proxy with TLS-Intercepting Proxy
+
+```hcl
+http_proxy_config = {
+  http_proxy  = "http://proxy.corp.contoso.com:8080"
+  https_proxy = "http://proxy.corp.contoso.com:8080"
+  no_proxy    = ["localhost", "127.0.0.1", "168.63.129.16", "10.0.0.0/8"]
+  trusted_ca  = filebase64("certs/proxy-ca.pem")
+}
+```
+
+### Scenario 7: Defender for Containers
+
+```hcl
+enable_defender            = true
+log_analytics_workspace_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace>"
 ```
 
 ### Connect to the Cluster
@@ -1285,3 +1408,9 @@ AKS Automatic dynamically selects the system node pool VM size. Ensure the subsc
 - [API Server VNet Integration](https://learn.microsoft.com/azure/aks/api-server-vnet-integration)
 - [Azure Landing Zone Terraform Accelerator](https://aka.ms/alz/acc/tf)
 - [Azure Verified Modules](https://azure.github.io/Azure-Verified-Modules/)
+- [HTTP Proxy support in AKS](https://learn.microsoft.com/azure/aks/http-proxy)
+- [Defender for Containers](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction)
+- [AKS cost analysis](https://learn.microsoft.com/azure/aks/cost-analysis)
+- [Key Vault soft-delete and purge protection](https://learn.microsoft.com/azure/key-vault/general/soft-delete-overview)
+- [ACR zone redundancy](https://learn.microsoft.com/azure/container-registry/zone-redundancy)
+- [NAP limitations](https://learn.microsoft.com/azure/aks/node-auto-provisioning#limitations-and-unsupported-features)

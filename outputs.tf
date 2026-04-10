@@ -52,6 +52,16 @@ output "app_routing_identity_object_id" {
   value       = try(azapi_resource.aks.output.properties.ingressProfile.webAppRouting.identity.objectId, null)
 }
 
+output "cluster_identity_principal_id" {
+  description = "Principal ID of the cluster SystemAssigned managed identity. Use for cross-subscription RBAC assignments (Network Contributor, Private DNS Zone Contributor)."
+  value       = azapi_resource.aks.identity[0].principal_id
+}
+
+output "cluster_identity_tenant_id" {
+  description = "Tenant ID of the cluster SystemAssigned managed identity."
+  value       = azapi_resource.aks.identity[0].tenant_id
+}
+
 # =============================================================================
 # Networking
 # =============================================================================
@@ -107,6 +117,11 @@ output "acr_login_server" {
 output "keyvault_id" {
   description = "Resource ID of the Azure Key Vault (null when create_keyvault = false)."
   value       = try(azapi_resource.keyvault[0].id, null)
+}
+
+output "keyvault_uri" {
+  description = "URI of the Azure Key Vault (e.g. https://name.vault.azure.net/). Used in Kubernetes TLS annotations and SecretProviderClass manifests."
+  value       = var.create_keyvault && var.keyvault_name != null ? "https://${var.keyvault_name}.vault.azure.net/" : null
 }
 
 output "pe_subnet_id" {
