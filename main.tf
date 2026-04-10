@@ -315,6 +315,14 @@ resource "azapi_resource" "aks" {
       condition     = !var.enable_kms || var.kms_key_vault_network_access != "Private" || var.kms_key_vault_resource_id != null
       error_message = "kms_key_vault_resource_id is required when enable_kms = true and kms_key_vault_network_access = Private."
     }
+
+    precondition {
+      condition = (
+        tonumber(split(".", var.dns_service_ip)[0]) == tonumber(split(".", cidrhost(var.service_cidr, 0))[0]) &&
+        tonumber(split(".", var.dns_service_ip)[1]) == tonumber(split(".", cidrhost(var.service_cidr, 0))[1])
+      )
+      error_message = "dns_service_ip must be within service_cidr. Verify that the IP address falls within the configured service CIDR range."
+    }
   }
 }
 

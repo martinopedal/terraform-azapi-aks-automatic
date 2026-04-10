@@ -6,22 +6,32 @@ variable "location" {
   description = "Azure region. Must support AKS Automatic (API Server VNet Integration GA, >= 3 AZs)."
   type        = string
   default     = "swedencentral"
+
+  validation {
+    condition     = length(var.location) > 0
+    error_message = "location must not be empty."
+  }
 }
 
 variable "resource_group_name" {
   description = "Name of the resource group."
   type        = string
   default     = "rg-aks-automatic"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9._()-]{1,90}$", var.resource_group_name))
+    error_message = "resource_group_name must be 1-90 characters, alphanumeric, periods, underscores, hyphens, and parentheses."
+  }
 }
 
 variable "cluster_name" {
-  description = "Name of the AKS Automatic cluster. Must be 1-63 characters, alphanumeric and hyphens only, start and end with alphanumeric."
+  description = "Name of the AKS Automatic cluster. Must be 2-63 characters, alphanumeric and hyphens only, start and end with alphanumeric."
   type        = string
   default     = "aks-automatic"
 
   validation {
     condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]$", var.cluster_name))
-    error_message = "cluster_name must be 1-63 characters, start and end with alphanumeric, contain only alphanumeric characters and hyphens."
+    error_message = "cluster_name must be 2-63 characters, start and end with alphanumeric, contain only alphanumeric characters and hyphens."
   }
 }
 
@@ -74,18 +84,33 @@ variable "external_node_subnet_id" {
   description = "Resource ID of a pre-provisioned node subnet. When set, network.tf resources are skipped."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.external_node_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_node_subnet_id))
+    error_message = "external_node_subnet_id must be a valid Azure subnet resource ID."
+  }
 }
 
 variable "external_apiserver_subnet_id" {
   description = "Resource ID of a pre-provisioned API server subnet (must be delegated to Microsoft.ContainerService/managedClusters)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.external_apiserver_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_apiserver_subnet_id))
+    error_message = "external_apiserver_subnet_id must be a valid Azure subnet resource ID."
+  }
 }
 
 variable "external_pe_subnet_id" {
   description = "Resource ID of a pre-provisioned private endpoint subnet. When set, PE subnet creation is skipped but PEs for ACR/KV are still created in this subnet."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.external_pe_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_pe_subnet_id))
+    error_message = "external_pe_subnet_id must be a valid Azure subnet resource ID."
+  }
 }
 
 variable "vnet_name" {
@@ -249,6 +274,11 @@ variable "firewall_private_ip" {
   description = "Private IP of the hub NVA/Azure Firewall for UDR egress. Required when egress_type = userDefinedRouting (the default)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.firewall_private_ip == null || can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$", var.firewall_private_ip))
+    error_message = "firewall_private_ip must be a valid IPv4 address."
+  }
 }
 
 # =============================================================================
@@ -343,6 +373,11 @@ variable "user_assigned_identity_id" {
   description = "Resource ID of a pre-created UserAssigned managed identity. Required when private_dns_zone_id is a custom resource ID. The identity must have Private DNS Zone Contributor on the referenced zone."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.user_assigned_identity_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.ManagedIdentity/userAssignedIdentities/[^/]+$", var.user_assigned_identity_id))
+    error_message = "user_assigned_identity_id must be a valid Azure UserAssigned managed identity resource ID."
+  }
 }
 
 variable "authorized_ip_ranges" {
@@ -371,6 +406,11 @@ variable "azure_monitor_workspace_id" {
   description = "Resource ID of the Azure Monitor workspace for Prometheus metrics and alert rules. Required when enable_prometheus_alerts = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.azure_monitor_workspace_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/", var.azure_monitor_workspace_id))
+    error_message = "azure_monitor_workspace_id must be a valid Azure resource ID."
+  }
 }
 
 variable "enable_prometheus_alerts" {
@@ -474,6 +514,11 @@ variable "log_analytics_workspace_id" {
   description = "Resource ID of the Log Analytics workspace for Defender for Containers and diagnostic settings. Required when enable_defender = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.log_analytics_workspace_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.OperationalInsights/workspaces/[^/]+$", var.log_analytics_workspace_id))
+    error_message = "log_analytics_workspace_id must be a valid Log Analytics workspace resource ID."
+  }
 }
 
 variable "enable_cost_analysis" {

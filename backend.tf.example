@@ -1,0 +1,18 @@
+# Remote backend configuration for Azure Storage.
+# Copy this file to backend.tf and update with your storage account details.
+# Required for production deployments - local state is not suitable for
+# environments with prevent_destroy lifecycle blocks.
+#
+# Create the storage account:
+#   az storage account create --name <name> --resource-group <rg> --sku Standard_LRS
+#   az storage container create --name tfstate --account-name <name>
+
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "<storage-rg>"
+    storage_account_name = "<storage-account>"
+    container_name       = "tfstate"
+    key                  = "aks-automatic.tfstate"
+    use_oidc             = true  # For OIDC/WIF auth in CI/CD
+  }
+}
