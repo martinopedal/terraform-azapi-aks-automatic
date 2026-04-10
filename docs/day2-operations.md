@@ -395,3 +395,118 @@ notation sign --signature-format cose \
 ```
 
 For ALZ Corp, image signing keys should be stored in the module-created Key Vault (``create_keyvault = true``) with RBAC access for the CI/CD pipeline identity.
+
+### Ingress Migration: Application Routing to AGC / Gateway API
+
+This module uses Application Routing add-on (managed NGINX) with `Ingress` resources as the recommended Corp ingress. Two future changes will require a migration:
+
+1. **Application Gateway for Containers (AGC)** becomes available on AKS Automatic with private IP frontends
+2. **Gateway API** replaces the Kubernetes `Ingress` API as the long-term standard
+
+**Current blockers (as of April 2026):**
+
+| Blocker | Status | Tracking |
+|---|---|---|
+| AGC add-on not supported on AKS Automatic | Waiting on product team | [AGC ALB Controller add-on](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon) |
+| AGC frontends are public-only (no private IP) | In development | [AGC Components](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components) |
+| Application Routing uses Ingress API, not Gateway API | Migration planned by AKS team | [Application Routing](https://learn.microsoft.com/azure/aks/app-routing) |
+| Ingress NGINX upstream maintenance ended March 2026 | Microsoft patches through Nov 2026 | AKS release notes |
+
+**Readiness checklist (check before starting migration):**
+
+- [ ] AGC add-on is GA on AKS Automatic (check AKS release notes)
+- [ ] AGC supports private IP frontends (check AGC docs)
+- [ ] AGC is available in your target region (Norway East: check [Products by Region](https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/))
+- [ ] Gateway API CRDs (`GatewayClass`, `Gateway`, `HTTPRoute`) are supported by Application Routing or AGC
+
+**Migration plan: Application Routing (NGINX) to AGC**
+
+Phase 1 - Prepare (no downtime):
+```bash
+# 1. Create the AGC subnet (delegated to Microsoft.ServiceNetworking/trafficControllers)
+#    Add to variables.tf or have the ALZ vending pipeline provision it
+#    Recommended: /24 in the spoke VNet
+
+# 2. Deploy AGC resource via Terraform (add to main.tf or a new agc.tf)
+#    Resource type: Microsoft.ServiceNetworking/trafficControllers
+#    Requires: AGC subnet, managed identity with Network Contributor on subnet
+
+# 3. Install the ALB Controller add-on on AKS Automatic
+#    This will be an azapi_resource property once supported:
+#    properties.ingressProfile.applicationGatewayForContainers.enabled = true
+
+# 4. Create a Gateway resource with private IP frontend
+#    (once private IP is supported)
+```
+
+Phase 2 - Parallel run (validate before cutover):
+```yaml
+# Create a Gateway + HTTPRoute alongside the existing Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agc-internal
+  namespace: my-app
+  annotations:
+    alb.networking.azure.io/alb-id: <agc-resource-id>
+spec:
+  gatewayClassName: azure-alb-internal  # private IP class
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: agc-tls-cert
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-app
+  namespace: my-app
+spec:
+  parentRefs:
+    - name: agc-internal
+  hostnames:
+    - "myapp.corp.contoso.com"
+  rules:
+    - backendRefs:
+        - name: my-app-svc
+          port: 80
+```
+
+Phase 3 - Cutover:
+```bash
+# 1. Update DNS to point to AGC internal IP instead of NGINX internal LB IP
+# 2. Verify traffic flows through AGC
+# 3. Remove the old Ingress resources
+# 4. Disable Application Routing NGINX (if no longer needed):
+#    Set ingressProfile.webAppRouting.enabled = false in main.tf
+# 5. Delete the NginxIngressController CR (if using internal LB config)
+```
+
+Phase 4 - Cleanup:
+```bash
+# 1. Remove old Ingress manifests from GitOps repo
+# 2. Update ArgoCD ingress (docs/argocd/05-ingress.yaml) to use Gateway API
+# 3. Update CiliumNetworkPolicies to allow AGC traffic instead of app-routing-system
+# 4. Update terraform.tfvars and documentation
+```
+
+**Terraform module changes needed at cutover:**
+
+| File | Change |
+|---|---|
+| `main.tf` | Add `applicationGatewayForContainers` to `ingressProfile` |
+| `variables.tf` | Add `enable_agc`, `agc_subnet_id` variables |
+| `network.tf` | Add AGC subnet with delegation (if module-created VNet) |
+| `dependencies.tf` | Add AGC resource (`Microsoft.ServiceNetworking/trafficControllers`) |
+| `docs/argocd/05-ingress.yaml` | Replace `Ingress` with `Gateway` + `HTTPRoute` |
+
+**Timeline guidance:**
+
+- **Now:** Use Application Routing with internal LB (this module's default)
+- **When AGC ships on Automatic + private IP:** Run Phase 1-2 in parallel, validate
+- **Before Nov 2026:** Complete cutover (Microsoft NGINX patches end)
+- **Long-term:** All ingress via Gateway API (AGC or other Gateway API controllers)
