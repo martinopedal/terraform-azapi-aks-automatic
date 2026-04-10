@@ -76,3 +76,59 @@ run "image_cleaner_interval_hours_rejects_below_24" {
     var.image_cleaner_interval_hours
   ]
 }
+
+run "defender_requires_workspace" {
+  command = plan
+
+  variables {
+    enable_defender = true
+    enable_byo_vnet = false
+    egress_type     = "loadBalancer"
+  }
+
+  expect_failures = [
+    azapi_resource.aks
+  ]
+}
+
+run "container_insights_requires_workspace" {
+  command = plan
+
+  variables {
+    enable_container_insights = true
+    enable_byo_vnet           = false
+    egress_type               = "loadBalancer"
+  }
+
+  expect_failures = [
+    azapi_resource.aks
+  ]
+}
+
+run "kms_requires_key_id" {
+  command = plan
+
+  variables {
+    enable_kms      = true
+    enable_byo_vnet = false
+    egress_type     = "loadBalancer"
+  }
+
+  expect_failures = [
+    azapi_resource.aks
+  ]
+}
+
+run "prometheus_alerts_require_workspace" {
+  command = plan
+
+  variables {
+    enable_prometheus_alerts = true
+    enable_byo_vnet          = false
+    egress_type              = "loadBalancer"
+  }
+
+  expect_failures = [
+    azapi_resource.prometheus_alerts
+  ]
+}

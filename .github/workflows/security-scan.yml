@@ -67,15 +67,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
           scan-ref: .
           format: sarif
           output: trivy-results.sarif
-          # Trivy scans HCL for misconfigurations and secrets.
-          # Like Checkov, azapi_resource ARM body is not deeply analysed.
           severity: CRITICAL,HIGH,MEDIUM
+          skip-dirs: docs/argocd
+          trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF
         if: always()

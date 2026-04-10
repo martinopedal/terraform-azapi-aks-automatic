@@ -6,22 +6,32 @@ variable "location" {
   description = "Azure region. Must support AKS Automatic (API Server VNet Integration GA, >= 3 AZs)."
   type        = string
   default     = "swedencentral"
+
+  validation {
+    condition     = length(var.location) > 0
+    error_message = "location must not be empty."
+  }
 }
 
 variable "resource_group_name" {
   description = "Name of the resource group."
   type        = string
   default     = "rg-aks-automatic"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9._()-]{1,90}$", var.resource_group_name))
+    error_message = "resource_group_name must be 1-90 characters, alphanumeric, periods, underscores, hyphens, and parentheses."
+  }
 }
 
 variable "cluster_name" {
-  description = "Name of the AKS Automatic cluster. Must be 1-63 characters, alphanumeric and hyphens only, start and end with alphanumeric."
+  description = "Name of the AKS Automatic cluster. Must be 2-63 characters, alphanumeric and hyphens only, start and end with alphanumeric."
   type        = string
   default     = "aks-automatic"
 
   validation {
     condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]$", var.cluster_name))
-    error_message = "cluster_name must be 1-63 characters, start and end with alphanumeric, contain only alphanumeric characters and hyphens."
+    error_message = "cluster_name must be 2-63 characters, start and end with alphanumeric, contain only alphanumeric characters and hyphens."
   }
 }
 
@@ -29,6 +39,11 @@ variable "kubernetes_version" {
   description = "Kubernetes version. Leave null to use the latest default."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kubernetes_version == null || can(regex("^\\d+\\.\\d+(\\.\\d+)?$", var.kubernetes_version))
+    error_message = "kubernetes_version must be in format X.Y or X.Y.Z (e.g. 1.30 or 1.30.1)."
+  }
 }
 
 variable "tags" {
@@ -74,24 +89,44 @@ variable "external_node_subnet_id" {
   description = "Resource ID of a pre-provisioned node subnet. When set, network.tf resources are skipped."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.external_node_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_node_subnet_id))
+    error_message = "external_node_subnet_id must be a valid Azure subnet resource ID."
+  }
 }
 
 variable "external_apiserver_subnet_id" {
   description = "Resource ID of a pre-provisioned API server subnet (must be delegated to Microsoft.ContainerService/managedClusters)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.external_apiserver_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_apiserver_subnet_id))
+    error_message = "external_apiserver_subnet_id must be a valid Azure subnet resource ID."
+  }
 }
 
 variable "external_pe_subnet_id" {
   description = "Resource ID of a pre-provisioned private endpoint subnet. When set, PE subnet creation is skipped but PEs for ACR/KV are still created in this subnet."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.external_pe_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_pe_subnet_id))
+    error_message = "external_pe_subnet_id must be a valid Azure subnet resource ID."
+  }
 }
 
 variable "vnet_name" {
   description = "Name of the virtual network (BYO VNet)."
   type        = string
   default     = "vnet-aks-automatic"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}[a-zA-Z0-9_]$", var.vnet_name))
+    error_message = "vnet_name must be 2-64 characters, alphanumeric, periods, underscores, and hyphens."
+  }
 }
 
 variable "vnet_address_space" {
@@ -109,6 +144,11 @@ variable "node_subnet_name" {
   description = "Name of the node subnet."
   type        = string
   default     = "snet-aks-nodes"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,78}[a-zA-Z0-9_]$", var.node_subnet_name))
+    error_message = "node_subnet_name must be 2-80 characters, alphanumeric, periods, underscores, and hyphens."
+  }
 }
 
 variable "node_subnet_address_prefix" {
@@ -126,6 +166,11 @@ variable "apiserver_subnet_name" {
   description = "Name of the API server VNet integration subnet. Minimum /28."
   type        = string
   default     = "snet-aks-apiserver"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,78}[a-zA-Z0-9_]$", var.apiserver_subnet_name))
+    error_message = "apiserver_subnet_name must be 2-80 characters, alphanumeric, periods, underscores, and hyphens."
+  }
 }
 
 variable "apiserver_subnet_address_prefix" {
@@ -148,6 +193,11 @@ variable "pe_subnet_name" {
   description = "Name of the private endpoint subnet."
   type        = string
   default     = "snet-private-endpoints"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,78}[a-zA-Z0-9_]$", var.pe_subnet_name))
+    error_message = "pe_subnet_name must be 2-80 characters, alphanumeric, periods, underscores, and hyphens."
+  }
 }
 
 variable "pe_subnet_address_prefix" {
@@ -195,6 +245,11 @@ variable "acr_private_dns_zone_id" {
   EOT
   type        = string
   default     = null
+
+  validation {
+    condition     = var.acr_private_dns_zone_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/privateDnsZones/[^/]+$", var.acr_private_dns_zone_id))
+    error_message = "acr_private_dns_zone_id must be a valid Azure Private DNS Zone resource ID."
+  }
 }
 
 variable "create_keyvault" {
@@ -221,6 +276,11 @@ variable "kv_private_dns_zone_id" {
   EOT
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kv_private_dns_zone_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/privateDnsZones/[^/]+$", var.kv_private_dns_zone_id))
+    error_message = "kv_private_dns_zone_id must be a valid Azure Private DNS Zone resource ID."
+  }
 }
 
 # =============================================================================
@@ -249,6 +309,11 @@ variable "firewall_private_ip" {
   description = "Private IP of the hub NVA/Azure Firewall for UDR egress. Required when egress_type = userDefinedRouting (the default)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.firewall_private_ip == null || can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$", var.firewall_private_ip))
+    error_message = "firewall_private_ip must be a valid IPv4 address."
+  }
 }
 
 # =============================================================================
@@ -337,12 +402,22 @@ variable "private_dns_zone_id" {
   EOT
   type        = string
   default     = null
+
+  validation {
+    condition     = var.private_dns_zone_id == null || var.private_dns_zone_id == "system" || var.private_dns_zone_id == "none" || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/privateDnsZones/[^/]+$", var.private_dns_zone_id))
+    error_message = "private_dns_zone_id must be null, 'system', 'none', or a valid Azure Private DNS Zone resource ID."
+  }
 }
 
 variable "user_assigned_identity_id" {
   description = "Resource ID of a pre-created UserAssigned managed identity. Required when private_dns_zone_id is a custom resource ID. The identity must have Private DNS Zone Contributor on the referenced zone."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.user_assigned_identity_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.ManagedIdentity/userAssignedIdentities/[^/]+$", var.user_assigned_identity_id))
+    error_message = "user_assigned_identity_id must be a valid Azure UserAssigned managed identity resource ID."
+  }
 }
 
 variable "authorized_ip_ranges" {
@@ -371,6 +446,11 @@ variable "azure_monitor_workspace_id" {
   description = "Resource ID of the Azure Monitor workspace for Prometheus metrics and alert rules. Required when enable_prometheus_alerts = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.azure_monitor_workspace_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/", var.azure_monitor_workspace_id))
+    error_message = "azure_monitor_workspace_id must be a valid Azure resource ID."
+  }
 }
 
 variable "enable_prometheus_alerts" {
@@ -474,6 +554,11 @@ variable "log_analytics_workspace_id" {
   description = "Resource ID of the Log Analytics workspace for Defender for Containers and diagnostic settings. Required when enable_defender = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.log_analytics_workspace_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.OperationalInsights/workspaces/[^/]+$", var.log_analytics_workspace_id))
+    error_message = "log_analytics_workspace_id must be a valid Log Analytics workspace resource ID."
+  }
 }
 
 variable "enable_cost_analysis" {
@@ -502,6 +587,11 @@ variable "kms_key_id" {
   description = "Full URI of the Key Vault key to use for KMS etcd encryption (e.g. https://<vault>.vault.azure.net/keys/<key>/<version>). Required when enable_kms = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_id == null || can(regex("^https://[^/]+\\.vault\\.azure\\.net/keys/[^/]+/[a-z0-9]+$", var.kms_key_id))
+    error_message = "kms_key_id must be a valid Key Vault key URI (e.g. https://<vault>.vault.azure.net/keys/<key>/<version>)."
+  }
 }
 
 variable "kms_key_vault_network_access" {
@@ -519,6 +609,11 @@ variable "kms_key_vault_resource_id" {
   description = "Resource ID of the Key Vault containing the KMS key. Required when enable_kms = true and kms_key_vault_network_access = Private."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_vault_resource_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.KeyVault/vaults/[^/]+$", var.kms_key_vault_resource_id))
+    error_message = "kms_key_vault_resource_id must be a valid Azure Key Vault resource ID."
+  }
 }
 
 variable "acr_zone_redundancy_enabled" {
