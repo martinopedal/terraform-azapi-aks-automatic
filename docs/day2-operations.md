@@ -308,3 +308,90 @@ Allow at least 30 minutes between creating a maintenance configuration and the s
 - **Workload Identity tokens:** Automatically managed by the Entra ID federated credential mechanism. No manual rotation needed.
 - **Cluster certificates:** AKS manages internal cluster certificate rotation. No operator action required.
 - **ACR tokens:** When using AcrPull via managed identity, no credentials to rotate. If using image pull secrets (not recommended), rotate them via Key Vault or external secret management.
+
+### Azure Backup for AKS
+
+AKS backup protects cluster state and application data. Configure backup after cluster deployment:
+
+```bash
+# Register the backup extension
+az k8s-extension create --cluster-name <cluster> \
+  --resource-group <rg> \
+  --cluster-type managedClusters \
+  --extension-type microsoft.dataprotection.kubernetes \
+  --name backup-extension \
+  --configuration-settings \
+    blobContainer=<container> \
+    storageAccount=<storage-account> \
+    storageAccountResourceGroup=<storage-rg> \
+    storageAccountSubscriptionId=<sub-id>
+
+# Create a backup vault (if not provided by ALZ platform team)
+az dataprotection backup-vault create \
+  --vault-name <vault-name> \
+  --resource-group <rg> \
+  --storage-setting "[{type:LocallyRedundant,datastore-type:VaultStore}]"
+
+# Create a backup policy
+az dataprotection backup-policy create \
+  --vault-name <vault-name> \
+  --resource-group <rg> \
+  --name aks-daily \
+  --policy @backup-policy.json
+
+# Configure backup instance
+az dataprotection backup-instance create \
+  --vault-name <vault-name> \
+  --resource-group <rg> \
+  --backup-instance @backup-instance.json
+```
+
+For ALZ Corp, the backup vault should be in the management subscription with cross-subscription access configured. See [AKS backup overview](https://learn.microsoft.com/azure/backup/azure-kubernetes-service-backup-overview).
+
+### Alerting and Monitoring Rules
+
+This module enables Managed Prometheus metrics and optionally Container Insights logs, but does not create alert rules. Configure alerts after deployment:
+
+**Prometheus alert rules (via Azure Monitor workspace):**
+
+| Alert | Query | Severity |
+|---|---|---|
+| Node not ready | ``kube_node_status_condition{condition="Ready",status="true"} == 0`` | Critical |
+| Pod crash looping | ``increase(kube_pod_container_status_restarts_total[1h]) > 5`` | High |
+| High CPU usage | ``avg(rate(container_cpu_usage_seconds_total[5m])) by (namespace) > 0.8`` | Medium |
+| PVC nearly full | ``kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9`` | High |
+| API server latency | ``histogram_quantile(0.99, rate(apiserver_request_duration_seconds_bucket[5m])) > 1`` | High |
+
+Create these as PrometheusRuleGroups in the Azure Monitor workspace, or use the AKS recommended alert rules via the Azure portal.
+
+For ALZ Corp with Azure Monitor Baseline Alerts (AMBA), review whether AMBA's AKS rules are compatible with the Managed Prometheus data source.
+
+### Cost Optimization with Reserved Instances
+
+For predictable base workloads, Azure Reserved VM Instances can reduce compute costs by 30-72%:
+
+1. **Analyze usage patterns**: Use AKS cost analysis (``enable_cost_analysis = true``) for 30+ days to identify steady-state VM families
+2. **Purchase reservations**: Target the VM families that Karpenter/NAP consistently selects (check ``karpenter_nodes_allocatable`` Prometheus metric)
+3. **Scope to subscription**: Scope reservations to the AKS spoke subscription for automatic application
+4. **Combine with spot**: Use Karpenter ``NodePool`` CRDs with ``karpenter.azure.com/priority: spot`` for interruptible batch workloads
+
+Note: NAP/Karpenter dynamically selects VM sizes. Reserved Instances work best when the workload has a predictable baseline that consistently uses the same VM family.
+
+### Container Image Signing and Supply Chain Security
+
+AKS Automatic secures the container supply chain through ACR with private endpoints and admin user disabled. For additional hardening:
+
+1. **Image signing with Notation**: Sign container images using [Notation](https://notaryproject.dev/) and verify signatures with [Ratify](https://ratify.dev/) on AKS
+2. **ACR Tasks for automated scanning**: Configure ACR Tasks to scan images on push using Microsoft Defender for Containers
+3. **Admission control**: Use Azure Policy with the ``ContainerAllowedImages`` policy to restrict images to your private ACR only
+4. **SBOM generation**: Generate Software Bill of Materials with ``syft`` or ``trivy`` and attach to images as OCI artifacts
+
+```bash
+# Sign an image with Notation (requires Azure Key Vault key)
+notation sign --signature-format cose \
+  ${ACR_SERVER}/myapp:v1.0 \
+  --plugin azure-kv \
+  --id https://<vault>.vault.azure.net/keys/<key>/<version>
+```
+
+For ALZ Corp, image signing keys should be stored in the module-created Key Vault (``create_keyvault = true``) with RBAC access for the CI/CD pipeline identity.
