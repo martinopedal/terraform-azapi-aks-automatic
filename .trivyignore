@@ -1,0 +1,4 @@
+# ArgoCD argocd-cm uses $-variable syntax to reference secrets from
+# argocd-secret. The clientSecret field contains "$oidc.entra.clientSecret"
+# which is a pointer, not an actual credential.
+KSV-0109

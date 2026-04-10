@@ -1,0 +1,115 @@
+# CiliumNetworkPolicy for the argocd namespace.
+# Presence of a policy with endpointSelector triggers Cilium's implicit
+# default-deny for unmatched traffic. Only explicitly allowed flows pass.
+#
+# Allowed egress:
+#   - Kubernetes API server (in-cluster, any port)
+#   - Git hosting (GitHub/Azure DevOps via hub firewall, HTTPS)
+#   - ACR private endpoint (container image pulls, HTTPS)
+#   - Key Vault private endpoint (TLS certs, HTTPS)
+#   - Entra ID OIDC (login.microsoftonline.com, HTTPS)
+#   - DNS (kube-dns, UDP/TCP 53)
+#   - Inter-component (redis, repo-server, dex within argocd namespace)
+#
+# Allowed ingress:
+#   - Application Routing NGINX controller (argocd-server UI, port 8080)
+#   - Inter-component within argocd namespace
+#
+# NOTE: toFQDNs rules require the hub Azure Firewall to also allow
+# the same FQDNs. If your Corp policy mandates an internal Git mirror,
+# replace the GitHub FQDNs with your internal Git server FQDN.
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: argocd-allow-required
+  namespace: argocd
+spec:
+  endpointSelector: {}
+  egress:
+    # DNS resolution (kube-dns)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+
+    # Kubernetes API server (in-cluster)
+    - toEntities:
+        - kube-apiserver
+
+    # Inter-component communication within argocd namespace
+    # (controller -> repo-server:8081, controller -> redis:6379,
+    #  server -> redis:6379, applicationset -> server:8080,
+    #  dex -> server:5556)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: argocd
+
+    # Entra ID OIDC (SSO login flow)
+    - toFQDNs:
+        - matchPattern: "login.microsoftonline.com"
+        - matchPattern: "graph.microsoft.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+    # Git hosting via hub firewall (HTTPS outbound)
+    # GitHub - replace with your internal Git server if Corp policy
+    # mandates an internal mirror
+    - toFQDNs:
+        - matchPattern: "github.com"
+        - matchPattern: "*.github.com"
+        - matchPattern: "*.githubusercontent.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+    # Azure DevOps (uncomment if using ADO)
+    # - toFQDNs:
+    #     - matchPattern: "dev.azure.com"
+    #     - matchPattern: "*.visualstudio.com"
+    #   toPorts:
+    #     - ports:
+    #         - port: "443"
+    #           protocol: TCP
+
+    # ACR private endpoint (HTTPS)
+    - toFQDNs:
+        - matchPattern: "*.azurecr.io"
+        - matchPattern: "*.privatelink.azurecr.io"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+    # Key Vault private endpoint (HTTPS)
+    - toFQDNs:
+        - matchPattern: "*.vault.azure.net"
+        - matchPattern: "*.privatelink.vaultcore.azure.net"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+
+  ingress:
+    # Allow traffic from Application Routing NGINX controller
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: app-routing-system
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+    # Allow inter-component communication within argocd namespace
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: argocd
