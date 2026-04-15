@@ -18,8 +18,8 @@ structural conventions and is designed to complement AVM-based landing zone depl
 
 ## HashiCorp Terraform Providers
 
-- **azapi provider:** https://github.com/Azure/terraform-provider-azapi — MPL-2.0
-- **azurerm provider:** https://github.com/hashicorp/terraform-provider-azurerm — MPL-2.0 *(data sources only)*
+- **azapi provider:** https://github.com/Azure/terraform-provider-azapi (MPL-2.0)
+- **azurerm provider:** https://github.com/hashicorp/terraform-provider-azurerm (MPL-2.0) *(data sources only)*
 - **Providers are downloaded at `terraform init` time and are not bundled in this repository.**
 
 > **Note on MPL-2.0:** The Mozilla Public License 2.0 is a weak copyleft license that applies
