@@ -348,7 +348,7 @@ variable "dns_service_ip" {
   default     = "10.245.0.10"
 
   validation {
-    condition     = can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$", var.dns_service_ip))
+    condition     = can(cidrhost("${var.dns_service_ip}/32", 0))
     error_message = "dns_service_ip must be a valid IPv4 address without a CIDR mask."
   }
 }
