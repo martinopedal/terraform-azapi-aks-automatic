@@ -226,3 +226,13 @@ Before committing changes, run the following:
 8. Ensure no NAT Gateway resources or variables remain in the Terraform code (Corp = hub firewall egress only)
 9. Verify egress FQDN list matches current AKS outbound rules documentation
 10. Cross-check the regional availability matrix against the Azure Products by Region page
+
+## Security rules
+- No secrets in code - use environment variables or GitHub Secrets
+- SHA-pin all GitHub Actions to commit SHAs
+- Use actions/checkout@v6 and actions/setup-python@v6 (Node.js 24 compatible)
+- No enforce_admins on branch protection
+- CodeQL enabled for code scanning
+
+## GitHub-first principle
+Validate changes in GitHub Actions, not locally. Push, trigger workflow, check logs, iterate.
