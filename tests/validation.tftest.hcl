@@ -132,3 +132,18 @@ run "prometheus_alerts_require_workspace" {
     azapi_resource.prometheus_alerts
   ]
 }
+
+run "dns_service_ip_outside_service_cidr_fails" {
+  command = plan
+
+  variables {
+    service_cidr    = "10.245.0.0/24"
+    dns_service_ip  = "10.245.1.10"
+    enable_byo_vnet = false
+    egress_type     = "loadBalancer"
+  }
+
+  expect_failures = [
+    azapi_resource.aks
+  ]
+}

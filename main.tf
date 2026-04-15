@@ -250,6 +250,7 @@ resource "azapi_resource" "aks" {
     "properties.oidcIssuerProfile.issuerURL",
     "properties.identityProfile.kubeletidentity.objectId",
     "properties.ingressProfile.webAppRouting.identity.objectId",
+    "identity",
   ]
 
   lifecycle {
@@ -318,10 +319,7 @@ resource "azapi_resource" "aks" {
     }
 
     precondition {
-      condition = (
-        tonumber(split(".", var.dns_service_ip)[0]) == tonumber(split(".", cidrhost(var.service_cidr, 0))[0]) &&
-        tonumber(split(".", var.dns_service_ip)[1]) == tonumber(split(".", cidrhost(var.service_cidr, 0))[1])
-      )
+      condition     = cidrhost("${var.dns_service_ip}/${split("/", var.service_cidr)[1]}", 0) == cidrhost(var.service_cidr, 0)
       error_message = "dns_service_ip must be within service_cidr. Verify that the IP address falls within the configured service CIDR range."
     }
   }
