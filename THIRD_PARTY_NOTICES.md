@@ -2,7 +2,7 @@
 
 This module is built with reference to the [Azure Verified Modules (AVM)](https://aka.ms/avm)
 specification and depends on the Terraform providers listed below. It does not source any
-AVM registry modules directly — all Azure resources are provisioned via the `azapi` provider.
+AVM registry modules directly - all Azure resources are provisioned via the `azapi` provider.
 
 ---
 
