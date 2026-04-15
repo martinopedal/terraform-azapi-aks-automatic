@@ -1039,3 +1039,13 @@ For region requirements, feature availability matrix (Norway East / Sweden Centr
 - [Key Vault soft-delete and purge protection](https://learn.microsoft.com/azure/key-vault/general/soft-delete-overview)
 - [ACR zone redundancy](https://learn.microsoft.com/azure/container-registry/zone-redundancy)
 - [NAP limitations](https://learn.microsoft.com/azure/aks/node-auto-provisioning#limitations-and-unsupported-features)
+
+---
+
+## Built with Azure Verified Modules
+
+This module follows the [Azure Verified Modules (AVM)](https://aka.ms/avm) specification.
+AVM modules are open-source, MIT-licensed, and maintained by Microsoft and community contributors.
+
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for full license details of all
+incorporated components.
