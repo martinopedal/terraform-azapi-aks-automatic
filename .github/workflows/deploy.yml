@@ -19,7 +19,7 @@ permissions:
 jobs:
   plan:
     name: Terraform Plan
-    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","linux","x64","personal"]') }}
+    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
     environment: ${{ inputs.environment }}
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
@@ -70,7 +70,7 @@ jobs:
     name: Terraform Apply
     needs: plan
     if: needs.plan.outputs.plan_exit_code == '2'
-    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","linux","x64","personal"]') }}
+    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
