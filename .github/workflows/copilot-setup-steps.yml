@@ -14,8 +14,13 @@ permissions:
   contents: read
 
 jobs:
+  decide-runner:
+    uses: martinopedal/github-runners-alz-corp-cookbook/.github/workflows/decide-runner.yml@v1
+    with:
+      self-hosted-labels: '["self-hosted", "personal", "pub", "linux"]'
+
   copilot-setup-steps:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.decide-runner.outputs.runner-labels) }}
     permissions:
       contents: read
     steps:

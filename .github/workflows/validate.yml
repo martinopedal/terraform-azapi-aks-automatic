@@ -10,6 +10,11 @@ permissions:
   contents: read
 
 jobs:
+  decide-runner:
+    uses: martinopedal/github-runners-alz-corp-cookbook/.github/workflows/decide-runner.yml@v1
+    with:
+      self-hosted-labels: '["self-hosted", "personal", "pub", "linux"]'
+
   terraform:
     name: Terraform Validate
     runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
