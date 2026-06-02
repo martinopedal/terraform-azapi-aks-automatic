@@ -9,7 +9,7 @@ locals {
   create_network     = var.enable_byo_vnet && !local.use_external_subnets
   create_route_table = local.create_network && var.egress_type == "userDefinedRouting"
   create_pe_subnet   = local.create_network && (var.create_acr || var.create_keyvault)
-  create_agc_subnet  = local.create_network && var.enable_app_gateway_for_containers && var.external_agc_subnet_id == null
+  create_agc_subnet  = local.create_network && var.create_resource_group && var.enable_app_gateway_for_containers && var.external_agc_subnet_id == null
 
   # Resource group resolution: either module-created or existing in current subscription.
   rg_id       = var.create_resource_group ? azapi_resource.rg[0].id : "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${var.resource_group_name}"
@@ -40,7 +40,9 @@ locals {
   )
 
   # --- Ingress ---
-  dns_zone_ids = length(var.dns_zone_resource_ids) > 0 ? var.dns_zone_resource_ids : null
+  # AGC is canonical. Managed NGINX is opt-in and suppressed when AGC is enabled.
+  enable_web_app_routing = var.enable_managed_nginx && !var.enable_app_gateway_for_containers
+  dns_zone_ids           = local.enable_web_app_routing && length(var.dns_zone_resource_ids) > 0 ? var.dns_zone_resource_ids : null
 
   # --- Identity ---
   # Custom private DNS zones require UserAssigned identity

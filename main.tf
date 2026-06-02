@@ -106,13 +106,13 @@ resource "azapi_resource" "aks" {
         authorizedIPRanges             = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
       }
 
-      # ----- Ingress - Application Routing (managed NGINX) ----------------------
-      # Preconfigured in Automatic. Optionally wire Azure DNS zones for
-      # automatic DNS record management, and Azure Key Vault for TLS certs.
+      # ----- Ingress ------------------------------------------------------------
+      # AGC is the canonical/default ingress. Managed NGINX Application Routing is
+      # explicitly disabled whenever AGC is enabled so NGINX does not become ingress.
       ingressProfile = merge(
         {
           webAppRouting = {
-            enabled            = true
+            enabled            = local.enable_web_app_routing
             dnsZoneResourceIds = local.dns_zone_ids
           }
         },
@@ -322,7 +322,7 @@ resource "azapi_resource" "aks" {
 
     precondition {
       condition     = !var.enable_app_gateway_for_containers || !var.enable_byo_vnet || local.agc_subnet_id != null
-      error_message = "external_agc_subnet_id is required when enable_app_gateway_for_containers = true with external BYO subnets. In standalone network mode, the module creates the delegated AGC subnet."
+      error_message = "external_agc_subnet_id is required when enable_app_gateway_for_containers = true with external BYO subnets or create_resource_group = false. In standalone create-resource-group mode, the module creates the delegated AGC subnet."
     }
 
     precondition {

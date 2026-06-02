@@ -250,7 +250,7 @@ resource "azapi_resource" "role_acr_pull" {
 # certificates, not the cluster control-plane identity. The add-on identity
 # objectId is exported from the AKS response.
 resource "azapi_resource" "role_kv_cert_user" {
-  count     = var.create_keyvault ? 1 : 0
+  count     = var.create_keyvault && local.enable_web_app_routing ? 1 : 0
   type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
   name      = uuidv5("dns", "${azapi_resource.aks.id}-kv-cert")
   parent_id = azapi_resource.keyvault[0].id

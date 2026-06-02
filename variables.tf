@@ -423,7 +423,13 @@ variable "dns_zone_resource_ids" {
 }
 
 variable "enable_app_gateway_for_containers" {
-  description = "Enable the AKS managed Application Gateway for Containers ALB Controller add-on and Gateway API add-on. Public preview on AKS Automatic; creates cost, so disabled by default."
+  description = "Enable the AKS managed Application Gateway for Containers ALB Controller add-on and Gateway API add-on. AGC is the canonical/default ingress posture."
+  type        = bool
+  default     = true
+}
+
+variable "enable_managed_nginx" {
+  description = "Enable the AKS managed NGINX Application Routing add-on. Ignored when enable_app_gateway_for_containers = true so AGC remains primary."
   type        = bool
   default     = false
 }
