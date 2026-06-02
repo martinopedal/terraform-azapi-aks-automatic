@@ -43,8 +43,9 @@ locals {
   agc_name = coalesce(var.app_gateway_for_containers_name, "${var.cluster_name}-agc")
 
   # --- Ingress ---
-  # AGC is canonical. Managed NGINX is opt-in and suppressed when AGC is enabled.
-  enable_web_app_routing = var.enable_managed_nginx && !var.enable_app_gateway_for_containers
+  # AKS Automatic requires WebAppRouting enabled regardless of primary ingress choice.
+  # When AGC is the primary ingress, NGINX routes are not used but the addon must exist.
+  enable_web_app_routing = true
   dns_zone_ids           = local.enable_web_app_routing && length(var.dns_zone_resource_ids) > 0 ? var.dns_zone_resource_ids : null
 
   # --- Identity ---
