@@ -133,3 +133,23 @@ output "agc_subnet_id" {
   description = "Resource ID of the Application Gateway for Containers subnet (module-created or external; null when AGC is disabled or managed VNet mode is used)."
   value       = local.agc_subnet_id
 }
+
+output "app_gateway_for_containers_id" {
+  description = "Resource ID of the Application Gateway for Containers Traffic Controller (null when AGC is disabled)."
+  value       = try(azapi_resource.agc[0].id, null)
+}
+
+output "app_gateway_for_containers_frontend_id" {
+  description = "Resource ID of the AGC frontend child resource (null when AGC is disabled)."
+  value       = try(azapi_resource.agc_frontend[0].id, null)
+}
+
+output "app_gateway_for_containers_association_id" {
+  description = "Resource ID of the AGC subnet association child resource (null when AGC is disabled)."
+  value       = try(azapi_resource.agc_association[0].id, null)
+}
+
+output "alb_controller_extension_id" {
+  description = "Resource ID of the ALB Controller Kubernetes extension (null when AGC is disabled)."
+  value       = try(azapi_resource.alb_controller_extension[0].id, null)
+}

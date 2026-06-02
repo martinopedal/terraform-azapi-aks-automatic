@@ -1,8 +1,8 @@
 # Day-2 Operations
 
-### Application Gateway for Containers Bootstrap
+### AS-BUILT RUNBOOK NOTES - Application Gateway for Containers
 
-AGC is the default ingress installed by the Terraform module (`enable_app_gateway_for_containers = true`). Terraform enables the AKS managed ALB Controller and Gateway API add-ons; workloads still need Kubernetes resources to create the AGC data plane.
+AGC is the default ingress installed by the Terraform module (`enable_app_gateway_for_containers = true`). Terraform installs the ALB Controller as a Kubernetes extension and creates the AGC Traffic Controller, frontend, and subnet association with AzAPI; workloads still need Gateway API resources to publish routes. Cost note: AGC is consumption-priced separately from the AKS Automatic Standard control-plane tier and node VM costs, so budget for AGC capacity/traffic in addition to the cheap `Standard_D2s_v5` node floor.
 
 1. Confirm prerequisites:
 
@@ -15,33 +15,29 @@ AGC is the default ingress installed by the Terraform module (`enable_app_gatewa
 
 2. Confirm the AGC subnet is a dedicated `/24` delegated to `Microsoft.ServiceNetworking/trafficControllers` and reachable from the AKS node subnet.
 
-3. Create the `ApplicationLoadBalancer` resource that binds AGC to the subnet:
+3. Terraform already creates the AGC Traffic Controller and subnet association. Deploy `Gateway` and `HTTPRoute` resources that reference the AGC GatewayClass/frontends for your workload:
 
    ```yaml
-   apiVersion: v1
-   kind: Namespace
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: Gateway
    metadata:
-     name: agc-infra
-   ---
-   apiVersion: alb.networking.azure.io/v1
-   kind: ApplicationLoadBalancer
-   metadata:
-     name: agc-default
-     namespace: agc-infra
+     name: sre-gateway
+     namespace: sre
    spec:
-     associations:
-     - /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<snet-agc>
+     gatewayClassName: azure-alb-external
+     listeners:
+     - name: http
+       protocol: HTTP
+       port: 80
    ```
 
-4. Deploy `Gateway` and `HTTPRoute` resources using `gatewayClassName: azure-alb-external`.
-
-5. Create DNS (usually CNAME) for the AGC-generated frontend FQDN. Private IP frontends are not available yet, so ALZ policy exceptions must acknowledge the public AGC frontend.
+4. Create DNS (usually CNAME) for the AGC-generated frontend FQDN. Private IP frontends are not available yet, so ALZ policy exceptions must acknowledge the public AGC frontend.
 
 Gotchas:
 
 - Managed NGINX is disabled by default when AGC is enabled. Do not use `webapprouting.kubernetes.azure.com` Ingress unless AGC is explicitly disabled and `enable_managed_nginx = true`.
 - UDR/firewall rules must allow ARM and Entra ID endpoints because the ALB Controller configures AGC through Azure APIs.
-- The AGC data-plane resource appears after the Kubernetes `ApplicationLoadBalancer` is applied, not immediately after Terraform creates the AKS cluster.
+- The AGC Traffic Controller/frontend/association are Terraform-managed in v0.3.0; routes still do not appear until `Gateway`/`HTTPRoute` objects are applied.
 
 ### Karpenter NodePool and AKSNodeClass Configuration
 
