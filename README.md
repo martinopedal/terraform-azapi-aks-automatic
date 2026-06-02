@@ -111,7 +111,7 @@ az provider register --namespace Microsoft.ContainerService
 **Before `terraform apply` (ALZ Corp):**
 - **Remote backend:** Configure an Azure Storage backend for state persistence and locking. This module uses `prevent_destroy` on critical resources; local state is not suitable for production. Create a `backend.tf` with your storage account details.
 - **Resource group:** Set `create_resource_group = false` to deploy into a pre-provisioned resource group (common for ALZ vending/adoption); the module constructs the RG ID in the current subscription.
-- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), AGC subnet (dedicated `/24`, delegated to `Microsoft.ServiceNetworking/trafficControllers`), and PE subnet are pre-provisioned by the ALZ vending pipeline. Because AGC is mandatory/default, `external_agc_subnet_id` is required in BYO-RG/external-subnet mode.
+- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), AGC subnet (dedicated `/24`, delegated to `Microsoft.ServiceNetworking/trafficControllers`), and PE subnet are pre-provisioned by the ALZ vending pipeline. Because AGC is mandatory/default, `app_gateway_for_containers_subnet_id` is required in BYO-RG/external-subnet mode.
 - **Firewall rules:** When using `egress_type = "userDefinedRouting"`, the hub Azure Firewall must whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). The `AzureKubernetesService` FQDN tag covers most requirements.
 - **Private DNS zones:** For private clusters, ensure `private.<region>.azmk8s.io` Private DNS Zone exists in the connectivity subscription and is linked to the hub VNet.
 - **Cross-subscription RBAC (not managed by this module):**
@@ -126,16 +126,16 @@ az provider register --namespace Microsoft.ContainerService
 
 ## AS-BUILT Deployment Contract
 
-Current released module status (`v0.2.0`): AGC is the mandatory/default ingress posture, managed NGINX is opt-in, BYO resource groups are supported, and the cheap system pool default is `Standard_D2s_v5`.
+Current released module status (`v0.3.0`): AGC is the mandatory/default ingress posture, installed via the ALB Controller extension plus AzAPI-managed `Microsoft.ServiceNetworking/trafficControllers`; managed NGINX is opt-in, BYO resource groups are supported, and the cheap system pool default is `Standard_D2s_v5`.
 
 | Area | AS-BUILT behavior | Consumer responsibility |
 |---|---|---|
 | Resource group | `create_resource_group = false` consumes an existing RG by constructing `/subscriptions/<current>/resourceGroups/<name>`. | Pre-create/tag the RG in the workload subscription when using ALZ vending. |
-| Ingress | `enable_app_gateway_for_containers = true` by default. The ARM body sets `ingressProfile.applicationLoadBalancer.enabled = true` and `ingressProfile.gatewayAPI.installation = "Standard"`. | Register AGC preview features/providers and supply `external_agc_subnet_id` in BYO-RG/external-subnet mode. |
+| Ingress | `enable_app_gateway_for_containers = true` by default. The AKS `managedClusters` body does **not** contain AGC properties; the module creates the ALB Controller extension and AGC Traffic Controller resources separately. | Register AGC preview features/providers and supply `app_gateway_for_containers_subnet_id` in BYO-RG/external-subnet mode. |
 | Managed NGINX | `enable_managed_nginx = false` by default. `webAppRouting.enabled` is false when AGC is enabled. | Only set `enable_managed_nginx = true` when AGC is disabled and you need Application Routing. |
-| AGC subnet | Standalone create-RG mode can create `snet-agc` as `/24` delegated to `Microsoft.ServiceNetworking/trafficControllers`. BYO-RG/external-subnet mode never creates it. | Vending pipeline must create a dedicated `/24` AGC subnet in the same VNet/region as AKS and pass its resource ID. |
+| AGC subnet | Standalone create-RG mode can create `snet-agc` as `/24` delegated to `Microsoft.ServiceNetworking/trafficControllers`. BYO-RG/external-subnet mode never creates it. | Vending pipeline must create a dedicated `/24` AGC subnet in the same VNet/region as AKS and pass `app_gateway_for_containers_subnet_id`. |
 | Egress | ALZ Corp default is `egress_type = "userDefinedRouting"` on BYO VNet. Managed NAT is only used when `enable_byo_vnet = false`; load balancer egress is dev/test only. | Attach UDR to the node subnet only, next hop hub Azure Firewall. Do not attach UDR/NAT to API server subnet. |
-| Cheap defaults | `system_node_vm_size = "Standard_D2s_v5"`; Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault are off unless enabled. | Budget for AKS Automatic Standard tier + at least one small node + AGC service cost. |
+| Cheap defaults | `system_node_vm_size = "Standard_D2s_v5"`; Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault are off unless enabled. | Budget for AKS Automatic Standard tier + at least one small node + AGC consumption-priced service cost. |
 
 ---
 
@@ -354,7 +354,7 @@ Client -> AGC Public Frontend -> ALB Controller -> Pods
 
 | Aspect | Detail |
 |---|---|
-| AKS integration | AKS managed add-on: `ingressProfile.applicationLoadBalancer.enabled = true` plus `ingressProfile.gatewayAPI.installation = "Standard"` |
+| AKS integration | ALB Controller installed as `Microsoft.KubernetesConfiguration/extensions@2024-11-01` with `extensionType = "microsoft.albcontroller"`; AGC data plane is `Microsoft.ServiceNetworking/trafficControllers@2025-03-01-preview` plus `frontends` and `associations` children |
 | Subnet | Dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`, exactly /24 for CNI Overlay |
 | Frontend | **Public FQDN only** (private IP not yet supported) |
 | Azure prerequisites | `Microsoft.ServiceNetworking` provider + `ManagedGatewayAPIPreview` and `ApplicationLoadBalancerPreview` feature registrations while preview |
@@ -362,18 +362,18 @@ Client -> AGC Public Frontend -> ALB Controller -> Pods
 | WAF | Optional WAF policy on AGC security policy resource |
 | TLS | SSL termination, ECDSA + RSA, end-to-end SSL, mTLS |
 | Traffic splitting | Weighted round-robin via `HTTPRoute` weights (canary, blue-green) |
-| Identity | `applicationloadbalancer-<cluster>` managed identity, auto-configured by add-on |
+| Identity | System-assigned identity on the `microsoft.albcontroller` Kubernetes extension; module grants AGC Configuration Manager and subnet join roles |
 | Deployment modes | ALB-managed (`ApplicationLoadBalancer` CRD) or BYO (Terraform/ARM provisioned) |
 
 AGC is enabled by default. In external-subnet/BYO RG mode, pass the delegated subnet explicitly:
 
 ```hcl
-enable_app_gateway_for_containers = true
-external_agc_subnet_id            = "/subscriptions/.../subnets/snet-agc" # delegated /24
-enable_managed_nginx              = false
+enable_app_gateway_for_containers     = true
+app_gateway_for_containers_subnet_id = "/subscriptions/.../subnets/snet-agc" # delegated /24
+enable_managed_nginx                 = false
 ```
 
-In standalone create-resource-group mode, the module creates `agc_subnet_name` (`snet-agc`) with `agc_subnet_address_prefix` (`10.10.8.0/24`) and the required `Microsoft.ServiceNetworking/trafficControllers` delegation. In external-subnet/BYO-RG mode, the vending pipeline must create and delegate the subnet and pass `external_agc_subnet_id`; the module will not create the AGC subnet when `create_resource_group = false`. The add-on creates the managed identity `applicationloadbalancer-<cluster-name>`; ensure it has permission to join/configure the AGC subnet before applying `ApplicationLoadBalancer` CRDs if the subnet is outside the node resource group.
+In standalone create-resource-group mode, the module creates `agc_subnet_name` (`snet-agc`) with `agc_subnet_address_prefix` (`10.10.8.0/24`) and the required `Microsoft.ServiceNetworking/trafficControllers` delegation. In external-subnet/BYO-RG mode, the vending pipeline must create and delegate the subnet and pass `app_gateway_for_containers_subnet_id`; the module will not create the AGC subnet when `create_resource_group = false`. The module creates the ALB Controller extension, the Traffic Controller, a frontend, and a subnet association. It also grants the extension identity `AppGw for Containers Configuration Manager` on the RG and `Network Contributor` on the AGC subnet.
 
 See [Application Gateway for Containers components](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components) and the [AKS managed add-on quickstart](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon).
 
@@ -854,9 +854,9 @@ Minimum openings a consumer/platform team must handle for the as-built AGC + UDR
 ### Gotchas Discovered Deploying for Real
 
 - `terraform validate` confirms the AzAPI schema accepts `webAppRouting.enabled = false`; live AKS Automatic may still force or report preconfigured add-ons differently. If ARM returns drift, keep AGC installed and treat NGINX as non-primary.
-- Enabling AGC is a two-part ARM shape: `ingressProfile.applicationLoadBalancer.enabled = true` **and** `ingressProfile.gatewayAPI.installation = "Standard"`. ALB alone is insufficient.
-- Terraform installs the managed ALB Controller add-on and can create/delegate the AGC subnet only in standalone create-RG mode. The actual AGC data-plane resource is created later from Kubernetes `ApplicationLoadBalancer`/`Gateway`/`HTTPRoute` resources.
-- `create_resource_group = false` means no module-created network resources. In ALZ vending mode, always pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_agc_subnet_id`.
+- AGC is **not** a `managedClusters.ingressProfile` property. Putting `gatewayAPI` (or AGC) under `properties.ingressProfile` produces invalid ARM for current AKS API versions. The module uses the ALB Controller Kubernetes extension plus ServiceNetworking Traffic Controller resources instead.
+- Terraform installs the ALB Controller extension and creates the AGC `trafficControllers`, `frontends`, and `associations` resources. Workloads still need Kubernetes `Gateway`/`HTTPRoute` resources to publish routes.
+- `create_resource_group = false` means no module-created network resources. In ALZ vending mode, always pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `app_gateway_for_containers_subnet_id`.
 - AGC with CNI Overlay requires a dedicated `/24` AGC subnet; peered/separate VNet AGC placement is not supported.
 - UDR belongs on the node subnet only. The API server subnet must not have a route table or NAT Gateway.
 - NAP default `NodePool` selects D-family SKUs; `Standard_D2s_v5` is the safe cheap default. Do not assume burstable B-series will work for Automatic/NAP.
@@ -899,7 +899,7 @@ When `enable_cost_analysis = true`, the module enables [AKS cost analysis](https
 
 If the ALZ platform uses the [AVM Subscription Vending module](https://github.com/Azure/bicep-registry-modules/tree/main/avm/ptn/lz/sub-vending) to provision application landing zone subscriptions, and the network team has customised it with [Azure Virtual Network Manager (AVNM) IPAM](https://learn.microsoft.com/azure/virtual-network-manager/concept-ip-address-management) for centralised IP address allocation, the following considerations change compared to the default BYO VNet path documented above.
 
-**VNet, resource group, and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, UDR, and often the workload resource group before this AKS module runs. In this mode, keep `enable_byo_vnet = true`, set `create_resource_group = false`, and pass the pre-existing subnet resource IDs via `external_node_subnet_id`, `external_apiserver_subnet_id`, `external_agc_subnet_id` (when AGC is enabled), and `external_pe_subnet_id` as needed. When external node/API subnet IDs are supplied, `network.tf` is skipped automatically.
+**VNet, resource group, and subnets are pre-provisioned by the vending pipeline.** The subscription vending module creates the spoke VNet, subnets, hub peering, NSG, UDR, and often the workload resource group before this AKS module runs. In this mode, keep `enable_byo_vnet = true`, set `create_resource_group = false`, and pass the pre-existing subnet resource IDs via `external_node_subnet_id`, `external_apiserver_subnet_id`, `app_gateway_for_containers_subnet_id` (when AGC is enabled), and `external_pe_subnet_id` as needed. When external node/API subnet IDs are supplied, `network.tf` is skipped automatically.
 
 **CIDR ranges are allocated from AVNM IPAM pools, not manually.** The `vnet_address_space`, `node_subnet_address_prefix`, and `apiserver_subnet_address_prefix` variables become irrelevant. The vending pipeline controls these via IPAM pool reservations. The overlay CIDRs (`pod_cidr`, `service_cidr`) are not part of the VNet address space (they exist in the overlay) but still must not overlap with any routable address space in the IPAM plan. Coordinate these with the network team.
 

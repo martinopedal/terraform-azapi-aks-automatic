@@ -106,25 +106,15 @@ resource "azapi_resource" "aks" {
         authorizedIPRanges             = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
       }
 
-      # ----- Ingress ------------------------------------------------------------
-      # AGC is the canonical/default ingress. Managed NGINX Application Routing is
-      # explicitly disabled whenever AGC is enabled so NGINX does not become ingress.
-      ingressProfile = merge(
-        {
-          webAppRouting = {
-            enabled            = local.enable_web_app_routing
-            dnsZoneResourceIds = local.dns_zone_ids
-          }
-        },
-        var.enable_app_gateway_for_containers ? {
-          applicationLoadBalancer = {
-            enabled = true
-          }
-          gatewayAPI = {
-            installation = "Standard"
-          }
-        } : {}
-      )
+      # ----- Ingress - managed NGINX only --------------------------------------
+      # AGC is not a managedCluster ingressProfile property. AGC resources are
+      # declared separately in agc.tf; webAppRouting remains opt-in only.
+      ingressProfile = {
+        webAppRouting = {
+          enabled            = local.enable_web_app_routing
+          dnsZoneResourceIds = local.dns_zone_ids
+        }
+      }
 
       # ----- Ingress - Istio service mesh (optional) ----------------------------
       serviceMeshProfile = var.enable_service_mesh ? {
@@ -172,8 +162,9 @@ resource "azapi_resource" "aks" {
 
       # ----- Azure RBAC ---------------------------------------------------------
       aadProfile = {
-        enableAzureRBAC = true
-        managed         = true
+        enableAzureRBAC     = true
+        managed             = true
+        adminGroupObjectIDs = length(var.cluster_admin_object_ids) > 0 ? var.cluster_admin_object_ids : null
       }
       enableRBAC           = true
       disableLocalAccounts = true
@@ -301,8 +292,8 @@ resource "azapi_resource" "aks" {
     }
 
     precondition {
-      condition     = var.enable_byo_vnet || (var.external_node_subnet_id == null && var.external_apiserver_subnet_id == null && var.external_pe_subnet_id == null && var.external_agc_subnet_id == null)
-      error_message = "external_*_subnet_id variables cannot be set when enable_byo_vnet = false. External subnets require enable_byo_vnet = true."
+      condition     = var.enable_byo_vnet || (var.external_node_subnet_id == null && var.external_apiserver_subnet_id == null && var.external_pe_subnet_id == null && var.external_agc_subnet_id == null && var.app_gateway_for_containers_subnet_id == null)
+      error_message = "external subnet ID variables cannot be set when enable_byo_vnet = false. External subnets require enable_byo_vnet = true."
     }
 
     precondition {
@@ -321,8 +312,13 @@ resource "azapi_resource" "aks" {
     }
 
     precondition {
+      condition     = var.app_gateway_for_containers_subnet_id == null || var.external_agc_subnet_id == null || var.app_gateway_for_containers_subnet_id == var.external_agc_subnet_id
+      error_message = "Set only app_gateway_for_containers_subnet_id, or set external_agc_subnet_id to the same value for backwards compatibility."
+    }
+
+    precondition {
       condition     = !var.enable_app_gateway_for_containers || !var.enable_byo_vnet || local.agc_subnet_id != null
-      error_message = "external_agc_subnet_id is required when enable_app_gateway_for_containers = true with external BYO subnets or create_resource_group = false. In standalone create-resource-group mode, the module creates the delegated AGC subnet."
+      error_message = "app_gateway_for_containers_subnet_id is required when enable_app_gateway_for_containers = true with external BYO subnets or create_resource_group = false. In standalone create-resource-group mode, the module creates the delegated AGC subnet."
     }
 
     precondition {

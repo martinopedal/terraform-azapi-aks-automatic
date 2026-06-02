@@ -136,13 +136,24 @@ variable "external_pe_subnet_id" {
 }
 
 variable "external_agc_subnet_id" {
-  description = "Resource ID of a pre-provisioned Application Gateway for Containers subnet delegated to Microsoft.ServiceNetworking/trafficControllers. Required for AGC in external-subnet mode."
+  description = "Deprecated alias for app_gateway_for_containers_subnet_id. Resource ID of a pre-provisioned AGC subnet delegated to Microsoft.ServiceNetworking/trafficControllers."
   type        = string
   default     = null
 
   validation {
     condition     = var.external_agc_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_agc_subnet_id))
     error_message = "external_agc_subnet_id must be a valid Azure subnet resource ID."
+  }
+}
+
+variable "app_gateway_for_containers_subnet_id" {
+  description = "Resource ID of the dedicated /24 Application Gateway for Containers association subnet delegated to Microsoft.ServiceNetworking/trafficControllers. Required when AGC is enabled in external-subnet/BYO-RG mode."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.app_gateway_for_containers_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.app_gateway_for_containers_subnet_id))
+    error_message = "app_gateway_for_containers_subnet_id must be a valid Azure subnet resource ID."
   }
 }
 
@@ -423,9 +434,42 @@ variable "dns_zone_resource_ids" {
 }
 
 variable "enable_app_gateway_for_containers" {
-  description = "Enable the AKS managed Application Gateway for Containers ALB Controller add-on and Gateway API add-on. AGC is the canonical/default ingress posture."
+  description = "Enable Application Gateway for Containers ingress: installs the ALB Controller extension and creates the Traffic Controller plus subnet association. AGC is the canonical/default ingress posture."
   type        = bool
   default     = true
+}
+
+variable "app_gateway_for_containers_name" {
+  description = "Name of the Microsoft.ServiceNetworking/trafficControllers resource. Defaults to <cluster_name>-agc."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.app_gateway_for_containers_name == null || can(regex("^[A-Za-z0-9]([A-Za-z0-9-_.]{0,62}[A-Za-z0-9])?$", var.app_gateway_for_containers_name))
+    error_message = "app_gateway_for_containers_name must be 1-64 characters and match the trafficControllers name rules."
+  }
+}
+
+variable "app_gateway_for_containers_frontend_name" {
+  description = "Name of the AGC frontend child resource. Defaults to frontend."
+  type        = string
+  default     = "frontend"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]([A-Za-z0-9-_.]{0,62}[A-Za-z0-9])?$", var.app_gateway_for_containers_frontend_name))
+    error_message = "app_gateway_for_containers_frontend_name must be 1-64 characters and match the trafficControllers/frontend name rules."
+  }
+}
+
+variable "app_gateway_for_containers_association_name" {
+  description = "Name of the AGC subnet association child resource. Defaults to association."
+  type        = string
+  default     = "association"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]([A-Za-z0-9-_.]{0,62}[A-Za-z0-9])?$", var.app_gateway_for_containers_association_name))
+    error_message = "app_gateway_for_containers_association_name must be 1-64 characters and match the trafficControllers/associations name rules."
+  }
 }
 
 variable "enable_managed_nginx" {
@@ -489,6 +533,12 @@ variable "user_assigned_identity_id" {
 
 variable "authorized_ip_ranges" {
   description = "CIDR ranges authorised to access the API server. Only applies to the public endpoint; ignored when private cluster is enabled."
+  type        = list(string)
+  default     = []
+}
+
+variable "cluster_admin_object_ids" {
+  description = "Microsoft Entra group object IDs granted AKS cluster-admin through aadProfile.adminGroupObjectIDs. Leave empty to manage Azure RBAC role assignments externally."
   type        = list(string)
   default     = []
 }
