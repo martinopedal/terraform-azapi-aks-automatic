@@ -9,6 +9,11 @@ locals {
   create_network     = var.enable_byo_vnet && !local.use_external_subnets
   create_route_table = local.create_network && var.egress_type == "userDefinedRouting"
   create_pe_subnet   = local.create_network && (var.create_acr || var.create_keyvault)
+  create_agc_subnet  = local.create_network && var.enable_app_gateway_for_containers && var.external_agc_subnet_id == null
+
+  # Resource group resolution: either module-created or existing in current subscription.
+  rg_id       = var.create_resource_group ? azapi_resource.rg[0].id : "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${var.resource_group_name}"
+  rg_location = var.location
 
   # Egress type: BYO VNet (either path) uses var.egress_type; managed VNet uses managedNATGateway
   outbound_type = var.enable_byo_vnet ? var.egress_type : "managedNATGateway"
@@ -28,6 +33,10 @@ locals {
     local.create_pe_subnet ? azapi_resource.pe_subnet[0].id :
     local.use_external_subnets ? var.external_pe_subnet_id :
     null
+  )
+  agc_subnet_id = (
+    local.create_agc_subnet ? azapi_resource.agc_subnet[0].id :
+    var.external_agc_subnet_id
   )
 
   # --- Ingress ---

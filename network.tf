@@ -21,8 +21,8 @@ resource "azapi_resource" "nsg" {
   count     = local.create_network ? 1 : 0
   type      = "Microsoft.Network/networkSecurityGroups@2024-05-01"
   name      = "nsg-${var.cluster_name}-nodes"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {
@@ -42,8 +42,8 @@ resource "azapi_resource" "vnet" {
   count     = local.create_network ? 1 : 0
   type      = "Microsoft.Network/virtualNetworks@2024-05-01"
   name      = var.vnet_name
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {
@@ -121,6 +121,39 @@ resource "azapi_resource" "apiserver_subnet" {
   depends_on = [azapi_resource.node_subnet]
 }
 
+
+# -----------------------------------------------------------------------------
+# Application Gateway for Containers Subnet
+#
+# Dedicated /24 subnet delegated to Microsoft.ServiceNetworking/trafficControllers.
+# Created only in standalone network mode when the AGC managed add-on is enabled.
+# -----------------------------------------------------------------------------
+
+resource "azapi_resource" "agc_subnet" {
+  count     = local.create_agc_subnet ? 1 : 0
+  type      = "Microsoft.Network/virtualNetworks/subnets@2024-05-01"
+  name      = var.agc_subnet_name
+  parent_id = azapi_resource.vnet[0].id
+
+  body = {
+    properties = {
+      addressPrefix = var.agc_subnet_address_prefix
+
+      delegations = [
+        {
+          name = "agc-delegation"
+          properties = {
+            serviceName = "Microsoft.ServiceNetworking/trafficControllers"
+          }
+        }
+      ]
+    }
+  }
+
+  # Subnets in the same VNet must be created sequentially.
+  depends_on = [azapi_resource.apiserver_subnet]
+}
+
 # =============================================================================
 # Egress - User-Defined Routing (forced-tunnelling through hub Azure Firewall)
 #
@@ -135,8 +168,8 @@ resource "azapi_resource" "route_table" {
   count     = local.create_route_table ? 1 : 0
   type      = "Microsoft.Network/routeTables@2024-05-01"
   name      = "rt-${var.cluster_name}"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {

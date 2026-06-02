@@ -24,6 +24,12 @@ variable "resource_group_name" {
   }
 }
 
+variable "create_resource_group" {
+  description = "When true, create the resource group. When false, deploy into an existing resource group with resource_group_name in the current subscription."
+  type        = bool
+  default     = true
+}
+
 variable "cluster_name" {
   description = "Name of the AKS Automatic cluster. Must be 2-63 characters, alphanumeric and hyphens only, start and end with alphanumeric."
   type        = string
@@ -43,6 +49,17 @@ variable "kubernetes_version" {
   validation {
     condition     = var.kubernetes_version == null || can(regex("^\\d+\\.\\d+(\\.\\d+)?$", var.kubernetes_version))
     error_message = "kubernetes_version must be in format X.Y or X.Y.Z (e.g. 1.30 or 1.30.1)."
+  }
+}
+
+variable "system_node_vm_size" {
+  description = "VM size for the AKS Automatic system pool. Default uses the smallest reliable D-series size for NAP default pools; B-series is intentionally not the default."
+  type        = string
+  default     = "Standard_D2s_v5"
+
+  validation {
+    condition     = can(regex("^Standard_[A-Za-z0-9]+[A-Za-z0-9_]*$", var.system_node_vm_size))
+    error_message = "system_node_vm_size must be an Azure VM SKU name such as Standard_D2s_v5."
   }
 }
 
@@ -115,6 +132,17 @@ variable "external_pe_subnet_id" {
   validation {
     condition     = var.external_pe_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_pe_subnet_id))
     error_message = "external_pe_subnet_id must be a valid Azure subnet resource ID."
+  }
+}
+
+variable "external_agc_subnet_id" {
+  description = "Resource ID of a pre-provisioned Application Gateway for Containers subnet delegated to Microsoft.ServiceNetworking/trafficControllers. Required for AGC in external-subnet mode."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.external_agc_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_agc_subnet_id))
+    error_message = "external_agc_subnet_id must be a valid Azure subnet resource ID."
   }
 }
 
@@ -208,6 +236,33 @@ variable "pe_subnet_address_prefix" {
   validation {
     condition     = can(cidrhost(var.pe_subnet_address_prefix, 0))
     error_message = "pe_subnet_address_prefix must be a valid CIDR block (e.g. 10.10.12.0/24)."
+  }
+}
+
+variable "agc_subnet_name" {
+  description = "Name of the Application Gateway for Containers subnet created in standalone network mode."
+  type        = string
+  default     = "snet-agc"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,78}[a-zA-Z0-9_]$", var.agc_subnet_name))
+    error_message = "agc_subnet_name must be 2-80 characters, alphanumeric, periods, underscores, and hyphens."
+  }
+}
+
+variable "agc_subnet_address_prefix" {
+  description = "Address prefix for the Application Gateway for Containers subnet. AGC with CNI Overlay requires exactly /24."
+  type        = string
+  default     = "10.10.8.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.agc_subnet_address_prefix, 0))
+    error_message = "agc_subnet_address_prefix must be a valid CIDR block (e.g. 10.10.8.0/24)."
+  }
+
+  validation {
+    condition     = tonumber(split("/", var.agc_subnet_address_prefix)[1]) == 24
+    error_message = "agc_subnet_address_prefix must be exactly /24 for Application Gateway for Containers with CNI Overlay."
   }
 }
 
@@ -367,6 +422,12 @@ variable "dns_zone_resource_ids" {
   default     = []
 }
 
+variable "enable_app_gateway_for_containers" {
+  description = "Enable the AKS managed Application Gateway for Containers ALB Controller add-on and Gateway API add-on. Public preview on AKS Automatic; creates cost, so disabled by default."
+  type        = bool
+  default     = false
+}
+
 variable "enable_service_mesh" {
   description = "Enable the Istio-based service mesh add-on (includes Istio ingress gateway)."
   type        = bool
@@ -431,9 +492,9 @@ variable "authorized_ip_ranges" {
 # =============================================================================
 
 variable "enable_prometheus" {
-  description = "Enable Azure Managed Prometheus metrics collection."
+  description = "Enable Azure Managed Prometheus metrics collection. Disabled by default to keep the cheapest cluster footprint."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_container_insights" {
