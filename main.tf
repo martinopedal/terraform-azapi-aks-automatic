@@ -28,7 +28,7 @@ resource "azapi_resource" "rg" {
 # =============================================================================
 
 resource "azapi_resource" "aks" {
-  type      = "Microsoft.ContainerService/managedClusters@2025-05-01"
+  type      = "Microsoft.ContainerService/managedClusters@2025-10-01"
   name      = var.cluster_name
   location  = local.rg_location
   parent_id = local.rg_id
