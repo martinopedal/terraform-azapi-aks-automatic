@@ -54,7 +54,8 @@ resource "azapi_resource" "aks" {
 
       # ----- Node provisioning (REQUIRED for Automatic) ------------------------
       nodeProvisioningProfile = {
-        mode = "Auto"
+        mode             = "Auto"
+        defaultNodePools = "Auto"
       }
 
       # ----- Agent pool ---------------------------------------------------------
