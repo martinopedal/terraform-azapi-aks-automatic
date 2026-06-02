@@ -6,6 +6,7 @@
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Prerequisites](#prerequisites)
+- [AS-BUILT Deployment Contract](#as-built-deployment-contract)
 - [Deployment Scenarios](#deployment-scenarios)
 - [Connect to the Cluster](#connect-to-the-cluster)
 - [Post-Deployment Checklist](#post-deployment-checklist)
@@ -33,6 +34,8 @@
 ### ALZ Corp Integration
 - [Azure Landing Zone Caveats](#azure-landing-zone-caveats)
 - [Azure Policy Conflicts](#azure-policy-conflicts)
+- [Firewall and Policy Openings](#firewall-and-policy-openings)
+- [Gotchas Discovered Deploying for Real](#gotchas-discovered-deploying-for-real)
 - [RBAC and Identity Requirements](#rbac-and-identity-requirements)
 
 ### Module Reference
@@ -84,24 +87,55 @@ terraform apply
 - azapi provider (downloaded automatically by `terraform init`)
 
 **Azure subscription requirements:**
-- Subscription quota for 16+ vCPUs of D-series VMs in the target region
-- Region must support API Server VNet Integration (GA in all public regions except `qatarcentral`)
-- `Microsoft.PolicyInsights` resource provider registered
+- Subscription quota for D-series VMs in the target region. The cheapest module default is `Standard_D2s_v5` for the system pool.
+- Region must support AKS Automatic, API Server VNet Integration, Node Auto-Provisioning, and Application Gateway for Containers.
+- Required providers registered: `Microsoft.ContainerService`, `Microsoft.Network`, `Microsoft.NetworkFunction`, `Microsoft.ServiceNetworking`, and `Microsoft.PolicyInsights`.
+- Required preview features for AGC managed add-on while it is preview: `Microsoft.ContainerService/ManagedGatewayAPIPreview` and `Microsoft.ContainerService/ApplicationLoadBalancerPreview`.
+
+Register/verify before first apply:
+
+```bash
+az provider register --namespace Microsoft.ContainerService
+az provider register --namespace Microsoft.Network
+az provider register --namespace Microsoft.NetworkFunction
+az provider register --namespace Microsoft.ServiceNetworking
+az provider register --namespace Microsoft.PolicyInsights
+
+az feature register --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview
+az feature register --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview
+az feature show --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview --query properties.state -o tsv
+az feature show --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview --query properties.state -o tsv
+az provider register --namespace Microsoft.ContainerService
+```
 
 **Before `terraform apply` (ALZ Corp):**
 - **Remote backend:** Configure an Azure Storage backend for state persistence and locking. This module uses `prevent_destroy` on critical resources; local state is not suitable for production. Create a `backend.tf` with your storage account details.
 - **Resource group:** Set `create_resource_group = false` to deploy into a pre-provisioned resource group (common for ALZ vending/adoption); the module constructs the RG ID in the current subscription.
-- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), optional AGC subnet (delegated to `Microsoft.ServiceNetworking/trafficControllers`), and PE subnet are pre-provisioned by the ALZ vending pipeline.
+- **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), AGC subnet (dedicated `/24`, delegated to `Microsoft.ServiceNetworking/trafficControllers`), and PE subnet are pre-provisioned by the ALZ vending pipeline. Because AGC is mandatory/default, `external_agc_subnet_id` is required in BYO-RG/external-subnet mode.
 - **Firewall rules:** When using `egress_type = "userDefinedRouting"`, the hub Azure Firewall must whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). The `AzureKubernetesService` FQDN tag covers most requirements.
 - **Private DNS zones:** For private clusters, ensure `private.<region>.azmk8s.io` Private DNS Zone exists in the connectivity subscription and is linked to the hub VNet.
 - **Cross-subscription RBAC (not managed by this module):**
-  - `Network Contributor` on the spoke VNet/subnets for the AKS cluster identity
-  - `Private DNS Zone Contributor` on referenced private DNS zones for Application Routing
-  - `DNS Zone Contributor` on referenced public DNS zones for Application Routing
-  - `Key Vault Certificate User` on any Key Vault used for TLS certs
+  - `Network Contributor` on the node/API/AGC subnets for the AKS cluster and AGC managed identities where required by vending scope
+  - `Private DNS Zone Contributor` / `DNS Zone Contributor` only when managed NGINX Application Routing DNS integration is enabled
+  - `Key Vault Certificate User` only when managed NGINX TLS-from-Key-Vault integration is enabled
 - **Log Analytics workspace:** Required when `enable_defender = true` or `enable_container_insights = true`. Pass the workspace resource ID via `log_analytics_workspace_id`.
 - **UserAssigned identity:** Required when `private_dns_zone_id` is a custom resource ID. Create a managed identity with `Private DNS Zone Contributor` on the zone and pass its resource ID via `user_assigned_identity_id`.
 - **CIDR coordination:** Verify that VNet, pod, and service CIDRs do not overlap with hub VNet, other spokes, or on-premises networks. See [CIDR Coordination](#cidr-coordination).
+
+---
+
+## AS-BUILT Deployment Contract
+
+Current released module status (`v0.2.0`): AGC is the mandatory/default ingress posture, managed NGINX is opt-in, BYO resource groups are supported, and the cheap system pool default is `Standard_D2s_v5`.
+
+| Area | AS-BUILT behavior | Consumer responsibility |
+|---|---|---|
+| Resource group | `create_resource_group = false` consumes an existing RG by constructing `/subscriptions/<current>/resourceGroups/<name>`. | Pre-create/tag the RG in the workload subscription when using ALZ vending. |
+| Ingress | `enable_app_gateway_for_containers = true` by default. The ARM body sets `ingressProfile.applicationLoadBalancer.enabled = true` and `ingressProfile.gatewayAPI.installation = "Standard"`. | Register AGC preview features/providers and supply `external_agc_subnet_id` in BYO-RG/external-subnet mode. |
+| Managed NGINX | `enable_managed_nginx = false` by default. `webAppRouting.enabled` is false when AGC is enabled. | Only set `enable_managed_nginx = true` when AGC is disabled and you need Application Routing. |
+| AGC subnet | Standalone create-RG mode can create `snet-agc` as `/24` delegated to `Microsoft.ServiceNetworking/trafficControllers`. BYO-RG/external-subnet mode never creates it. | Vending pipeline must create a dedicated `/24` AGC subnet in the same VNet/region as AKS and pass its resource ID. |
+| Egress | ALZ Corp default is `egress_type = "userDefinedRouting"` on BYO VNet. Managed NAT is only used when `enable_byo_vnet = false`; load balancer egress is dev/test only. | Attach UDR to the node subnet only, next hop hub Azure Firewall. Do not attach UDR/NAT to API server subnet. |
+| Cheap defaults | `system_node_vm_size = "Standard_D2s_v5"`; Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault are off unless enabled. | Budget for AKS Automatic Standard tier + at least one small node + AGC service cost. |
 
 ---
 
@@ -302,7 +336,7 @@ http_proxy_config = {
 
 ### Ingress
 
-AKS Automatic supports three ingress options, but they do not all use the same API model today. AGC uses the Kubernetes Gateway API. Application Routing currently uses Kubernetes `Ingress` resources. The AKS Istio add-on currently uses Istio CRDs for ingress and traffic management.
+AKS Automatic supports multiple ingress technologies, but this module standardizes on **Application Gateway for Containers (AGC)** as the mandatory/default ingress. AGC uses Kubernetes Gateway API. Managed NGINX Application Routing is opt-in and uses Kubernetes `Ingress` resources. The AKS Istio add-on uses Istio CRDs for ingress and traffic management.
 
 > **Ingress NGINX retirement notice:** The upstream Ingress NGINX project maintenance ended March 2026. Microsoft provides security patches for the Application Routing add-on NGINX through November 2026. AKS is migrating to the Kubernetes Gateway API as the long-term ingress standard. Plan migration to AGC (when private IP ships) or other Gateway API-compatible controllers.
 
@@ -310,7 +344,7 @@ AKS Automatic supports three ingress options, but they do not all use the same A
 
 > **Preview caveat:** The AKS managed Application Gateway for Containers add-on is public preview on AKS Automatic. This module intentionally enables AGC by default because it is the canonical ingress posture.
 >
-> **Corp caveat:** AGC frontends do not support private IP addresses today; frontends expose a public FQDN. If a scenario requires fully private ingress, explicitly disable AGC and opt into managed NGINX or Istio internal ingress.
+> **Corp caveat:** AGC frontends do not support private IP addresses today; frontends expose a public FQDN. Because AGC is mandatory for this module, align ALZ policy/firewall exceptions with that as-built reality. If a scenario requires fully private ingress, that is a deliberate exception path: explicitly disable AGC and opt into managed NGINX or Istio internal ingress.
 
 AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. The managed add-on deploys the ALB Controller; Kubernetes `ApplicationLoadBalancer`, `Gateway`, and `HTTPRoute` resources then create and configure the Azure Application Gateway for Containers resources.
 
@@ -323,6 +357,7 @@ Client -> AGC Public Frontend -> ALB Controller -> Pods
 | AKS integration | AKS managed add-on: `ingressProfile.applicationLoadBalancer.enabled = true` plus `ingressProfile.gatewayAPI.installation = "Standard"` |
 | Subnet | Dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`, exactly /24 for CNI Overlay |
 | Frontend | **Public FQDN only** (private IP not yet supported) |
+| Azure prerequisites | `Microsoft.ServiceNetworking` provider + `ManagedGatewayAPIPreview` and `ApplicationLoadBalancerPreview` feature registrations while preview |
 | API model | `GatewayClass`, `Gateway`, `HTTPRoute` CRDs |
 | WAF | Optional WAF policy on AGC security policy resource |
 | TLS | SSL termination, ECDSA + RSA, end-to-end SSL, mTLS |
@@ -432,8 +467,8 @@ Pods -> Node -> UDR 0.0.0.0/0 -> Hub Azure Firewall -> Internet
 | `mcr.microsoft.com` | 443 | System container images |
 | `*.data.mcr.microsoft.com` | 443 | MCR data endpoint |
 | `mcr-0001.mcr-msedge.net` | 443 | MCR CDN endpoint |
-| `management.azure.com` | 443 | Azure Resource Manager |
-| `login.microsoftonline.com` | 443 | Entra ID authentication |
+| `management.azure.com` | 443 | Azure Resource Manager, AGC ALB Controller, and AKS control plane ARM operations |
+| `login.microsoftonline.com` | 443 | Entra ID authentication and managed identity token acquisition |
 | `packages.microsoft.com` | 443 | Azure Linux packages |
 | `acs-mirror.azureedge.net` | 443 | Azure Linux mirror |
 | `dc.services.visualstudio.com` | 443 | Container Insights telemetry |
@@ -444,11 +479,12 @@ Pods -> Node -> UDR 0.0.0.0/0 -> Hub Azure Firewall -> Internet
 
 Additional rules beyond the FQDN tag:
 
-| FQDN | Purpose |
+| FQDN / opening | Purpose |
 |---|---|
 | `<acr-name>.azurecr.io` | Application container images |
 | Helm chart registries | Third-party charts |
 | Workload-specific external APIs | Application dependencies |
+| AGC public frontend | Client ingress to the AGC-generated frontend/FQDN. Public frontend is current AGC behavior. |
 
 Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNAT exhaustion. The route table applies to the **node subnet only**. The API server subnet must not have a route table.
 
@@ -656,7 +692,7 @@ The module applies secure defaults that can be overridden when needed:
 
 ## BYO VNet Topology
 
-This section shows the target ALZ Corp topology. The module implements the node subnet, API server subnet, optional AGC subnet (when `enable_app_gateway_for_containers = true` in standalone mode), and private endpoint subnet (when `create_acr` or `create_keyvault` is true in standalone mode).
+This section shows the target ALZ Corp topology. The module implements the node subnet, API server subnet, AGC subnet (when `enable_app_gateway_for_containers = true` in standalone create-RG mode), and private endpoint subnet (when `create_acr` or `create_keyvault` is true in standalone mode).
 
 ```
 Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
@@ -788,7 +824,8 @@ ALZ assigns Azure Policies at the management group level. AKS Automatic preconfi
 | `Kubernetes cluster should not allow privileged containers` | AKS system pods require privileges | Request exemption for system DaemonSets |
 | `Network policies should be enforced on AKS clusters` | Already enforced by Cilium but policy may not detect this | Request exemption or update policy to recognise Cilium |
 | Policies enforcing specific NSG rules | AKS injects its own NSG rules that may violate strict policies | Request exemption on AKS node subnet |
-| `Deny-PublicEndpoints` / `Deny-PublicIP` | Blocks public endpoints on PaaS services | Module is compliant: ACR, Key Vault, and optionally AKS API server are private-only |
+| Policies denying subnet delegation | May block `Microsoft.ContainerService/managedClusters` or `Microsoft.ServiceNetworking/trafficControllers` delegations | Allow the API server and AGC subnet delegations in the vending policy set |
+| `Deny-PublicEndpoints` / `Deny-PublicIP` | AGC frontends are public-FQDN today even when the AKS API, ACR, and Key Vault are private | Scope an explicit AGC exception to the AGC traffic controller/frontend resources, or choose a documented non-AGC exception path |
 | `Deploy-Diag-LogsCat` (DeployIfNotExists) | Auto-deploys diagnostic settings on resources missing them | Module does not create diagnostic settings; ALZ auto-remediation will add them. Pass `log_analytics_workspace_id` for Defender integration. |
 | Tag enforcement policies | May require specific tags (e.g. `costCenter`, `owner`) not included in defaults | Add required tags to the `tags` variable input |
 
@@ -804,6 +841,27 @@ az policy assignment list --scope /subscriptions/<subscription-id> --output tabl
 
 Request exemptions from the platform team for policies incompatible with AKS Automatic.
 
+### Firewall and Policy Openings
+
+Minimum openings a consumer/platform team must handle for the as-built AGC + UDR posture:
+
+- **Feature/provider registration:** `Microsoft.ServiceNetworking`, `Microsoft.NetworkFunction`, `Microsoft.ContainerService`, `ManagedGatewayAPIPreview`, and `ApplicationLoadBalancerPreview` must be registered before apply.
+- **Subnet delegations:** API server subnet delegated to `Microsoft.ContainerService/managedClusters`; AGC subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`; AGC subnet should be a dedicated `/24` in the same VNet and region as the AKS node subnet.
+- **UDR firewall egress:** allow the `AzureKubernetesService` FQDN tag plus explicit MCR/package/ARM/login endpoints listed in [Egress](#egress). If using a third-party NVA, allow each FQDN individually.
+- **AGC ingress:** AGC currently creates a public frontend/FQDN. Any ALZ policy denying public endpoints must carry a narrow, documented AGC exception.
+- **Policy exemptions:** do not create broad exemptions up front. Discover the blocking assignment/resource first, then request the narrowest exemption with assignment ID, scope/resource ID, justification, and sunset/permanent classification.
+
+### Gotchas Discovered Deploying for Real
+
+- `terraform validate` confirms the AzAPI schema accepts `webAppRouting.enabled = false`; live AKS Automatic may still force or report preconfigured add-ons differently. If ARM returns drift, keep AGC installed and treat NGINX as non-primary.
+- Enabling AGC is a two-part ARM shape: `ingressProfile.applicationLoadBalancer.enabled = true` **and** `ingressProfile.gatewayAPI.installation = "Standard"`. ALB alone is insufficient.
+- Terraform installs the managed ALB Controller add-on and can create/delegate the AGC subnet only in standalone create-RG mode. The actual AGC data-plane resource is created later from Kubernetes `ApplicationLoadBalancer`/`Gateway`/`HTTPRoute` resources.
+- `create_resource_group = false` means no module-created network resources. In ALZ vending mode, always pass `external_node_subnet_id`, `external_apiserver_subnet_id`, and `external_agc_subnet_id`.
+- AGC with CNI Overlay requires a dedicated `/24` AGC subnet; peered/separate VNet AGC placement is not supported.
+- UDR belongs on the node subnet only. The API server subnet must not have a route table or NAT Gateway.
+- NAP default `NodePool` selects D-family SKUs; `Standard_D2s_v5` is the safe cheap default. Do not assume burstable B-series will work for Automatic/NAP.
+- The `AzureKubernetesService` FQDN tag covers most AKS egress, but real deployments still need explicit ACR, Helm, package mirror, workload, and sometimes AGC/ARM/login openings depending on firewall implementation.
+
 ### azapi vs AVM Compatibility
 
 This module uses `azapi_resource` for all Azure resources. AVM modules use `azurerm_*` resources.
@@ -818,17 +876,16 @@ This module uses `azapi_resource` for all Azure resources. AVM modules use `azur
 
 AKS Automatic enforces Azure RBAC for Kubernetes (`aadProfile.enableAzureRBAC = true`, local accounts disabled).
 
-The cluster's SystemAssigned managed identity requires the following role assignments, which are **not created by this module**:
+The cluster identity and managed add-on identities require the following role assignments. In standalone mode this module creates only the assignments it owns; in ALZ vending mode, cross-subscription/subnet-scoped assignments must be managed by the platform team or a separate Terraform state.
 
 | Role | Scope | Purpose |
 |---|---|---|
-| `Network Contributor` | BYO VNet and subnets | Node provisioning, subnet joins. Created by this module in standalone mode; must be granted externally in vending mode. |
-| `Private DNS Zone Contributor` | Private DNS zones in connectivity subscription | Application Routing private DNS record management |
-| `DNS Zone Contributor` | Public DNS zones | Application Routing public DNS record management |
-| `Key Vault Certificate User` | Key Vault(s) for TLS certs | Application Routing TLS certificate retrieval |
-| `AcrPull` | Azure Container Registry | Pull application container images |
-
-In ALZ, these are cross-subscription RBAC assignments that must be managed by the platform team or a separate Terraform state.
+| `Network Contributor` | Node/API/AGC subnets as applicable | Node provisioning and subnet joins. Created by this module only for the module-created VNet; grant externally in vending mode. |
+| `AppGw for Containers Configuration Manager` | AGC resource / node resource group as required by ALB Controller | Lets the managed ALB Controller configure Application Gateway for Containers. The managed add-on creates the identity, but external scopes may still need grants. |
+| `Private DNS Zone Contributor` | Private DNS zones in connectivity subscription | Managed NGINX Application Routing private DNS record management only when `enable_managed_nginx = true`. |
+| `DNS Zone Contributor` | Public DNS zones | Managed NGINX Application Routing public DNS record management only when `enable_managed_nginx = true`. |
+| `Key Vault Certificate User` | Key Vault(s) for TLS certs | Managed NGINX TLS certificate retrieval only when `enable_managed_nginx = true`. |
+| `AcrPull` | Azure Container Registry | Pull application container images. |
 
 ### Monitoring Integration
 
@@ -995,7 +1052,7 @@ After `terraform apply` completes, these steps finalize the cluster for producti
 |---|---|---|
 | Connect to cluster | `az aks get-credentials --resource-group <rg> --name <cluster>` | Always |
 | Verify nodes | `kubectl get nodes` - confirm nodes are Ready across availability zones | Always |
-| Cross-subscription RBAC | Grant `Network Contributor`, `Private DNS Zone Contributor`, `Key Vault Certificate User` to AKS identity | ALZ Corp (not managed by this module) |
+| Cross-subscription RBAC | Grant `Network Contributor` on node/API/AGC subnets and DNS/KV roles only when the corresponding add-ons are enabled | ALZ Corp (not managed by this module) |
 | Install ArgoCD (managed extension) | `az k8s-extension create --extension-type microsoft.argocd` ([docs](https://learn.microsoft.com/azure/azure-arc/kubernetes/tutorial-use-gitops-argocd)) | Recommended for GitOps |
 | Bootstrap ArgoCD (self-managed) | Apply manifests from [docs/argocd/](docs/argocd/README.md) | If full control needed |
 | Create Karpenter NodePools | Apply `NodePool` + `AKSNodeClass` CRDs for workload-specific node pools | When customizing node provisioning |
