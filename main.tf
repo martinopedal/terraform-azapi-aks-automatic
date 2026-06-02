@@ -65,6 +65,8 @@ resource "azapi_resource" "aks" {
         {
           name         = "systempool"
           mode         = "System"
+          type         = "VirtualMachineScaleSets"
+          count        = 1
           osType       = "Linux"
           osSKU        = "AzureLinux"
           vmSize       = var.system_node_vm_size
