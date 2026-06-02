@@ -356,23 +356,26 @@ variable "kv_private_dns_zone_id" {
 variable "egress_type" {
   description = <<-EOT
     Outbound (egress) type for BYO VNet or external subnet deployments:
-      - "userDefinedRouting"     : Default for Corp. Routes 0.0.0.0/0 to the hub Azure Firewall via UDR.
+      - "none"                   : Cluster does not configure egress; relies on pre-existing UDR/NAT on the subnet.
+                                   Required for AKS Automatic (sku=Automatic) with BYO VNet, because the AKS RP
+                                   does not support userDefinedRouting with Node Auto-Provisioning.
+      - "userDefinedRouting"     : Routes 0.0.0.0/0 to the hub Azure Firewall via UDR. Standard/Base SKU only.
       - "loadBalancer"           : Uses the AKS Standard Load Balancer for SNAT. Dev/test only.
     Ignored when using managed VNet (always managedNATGateway).
     NAT Gateway is not offered as an option because ALZ Corp requires centralised
     egress control through the hub firewall.
   EOT
   type        = string
-  default     = "userDefinedRouting"
+  default     = "none"
 
   validation {
-    condition     = contains(["userDefinedRouting", "loadBalancer"], var.egress_type)
-    error_message = "egress_type must be one of: userDefinedRouting, loadBalancer."
+    condition     = contains(["none", "userDefinedRouting", "loadBalancer"], var.egress_type)
+    error_message = "egress_type must be one of: none, userDefinedRouting, loadBalancer."
   }
 }
 
 variable "firewall_private_ip" {
-  description = "Private IP of the hub NVA/Azure Firewall for UDR egress. Required when egress_type = userDefinedRouting (the default)."
+  description = "Private IP of the hub NVA/Azure Firewall for UDR egress. Required when egress_type = userDefinedRouting and the module manages the network (create_network path)."
   type        = string
   default     = null
 
