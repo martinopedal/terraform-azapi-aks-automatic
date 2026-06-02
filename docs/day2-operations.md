@@ -1,5 +1,48 @@
 # Day-2 Operations
 
+### Application Gateway for Containers Bootstrap
+
+AGC is the default ingress installed by the Terraform module (`enable_app_gateway_for_containers = true`). Terraform enables the AKS managed ALB Controller and Gateway API add-ons; workloads still need Kubernetes resources to create the AGC data plane.
+
+1. Confirm prerequisites:
+
+   ```bash
+   az feature show --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview --query properties.state -o tsv
+   az feature show --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview --query properties.state -o tsv
+   kubectl get pods -n kube-system -l app=alb-controller
+   kubectl get gatewayclass azure-alb-external
+   ```
+
+2. Confirm the AGC subnet is a dedicated `/24` delegated to `Microsoft.ServiceNetworking/trafficControllers` and reachable from the AKS node subnet.
+
+3. Create the `ApplicationLoadBalancer` resource that binds AGC to the subnet:
+
+   ```yaml
+   apiVersion: v1
+   kind: Namespace
+   metadata:
+     name: agc-infra
+   ---
+   apiVersion: alb.networking.azure.io/v1
+   kind: ApplicationLoadBalancer
+   metadata:
+     name: agc-default
+     namespace: agc-infra
+   spec:
+     associations:
+     - /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<snet-agc>
+   ```
+
+4. Deploy `Gateway` and `HTTPRoute` resources using `gatewayClassName: azure-alb-external`.
+
+5. Create DNS (usually CNAME) for the AGC-generated frontend FQDN. Private IP frontends are not available yet, so ALZ policy exceptions must acknowledge the public AGC frontend.
+
+Gotchas:
+
+- Managed NGINX is disabled by default when AGC is enabled. Do not use `webapprouting.kubernetes.azure.com` Ingress unless AGC is explicitly disabled and `enable_managed_nginx = true`.
+- UDR/firewall rules must allow ARM and Entra ID endpoints because the ALB Controller configures AGC through Azure APIs.
+- The AGC data-plane resource appears after the Kubernetes `ApplicationLoadBalancer` is applied, not immediately after Terraform creates the AKS cluster.
+
 ### Karpenter NodePool and AKSNodeClass Configuration
 
 After cluster deployment, customise node provisioning behaviour by creating Karpenter CRDs. These are not managed by Terraform. They are Kubernetes-native resources applied via `kubectl`.
