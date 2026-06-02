@@ -92,12 +92,12 @@ output "egress_type" {
 
 output "resource_group_name" {
   description = "Name of the resource group."
-  value       = azapi_resource.rg.name
+  value       = var.resource_group_name
 }
 
 output "resource_group_id" {
   description = "Resource ID of the resource group."
-  value       = azapi_resource.rg.id
+  value       = local.rg_id
 }
 
 # =============================================================================
@@ -127,4 +127,9 @@ output "keyvault_uri" {
 output "pe_subnet_id" {
   description = "Resource ID of the private endpoint subnet (module-created or external; null when not used)."
   value       = local.pe_subnet_id
+}
+
+output "agc_subnet_id" {
+  description = "Resource ID of the Application Gateway for Containers subnet (module-created or external; null when AGC is disabled or managed VNet mode is used)."
+  value       = local.agc_subnet_id
 }

@@ -8,14 +8,19 @@
 # =============================================================================
 
 location            = "swedencentral"
-resource_group_name = "rg-aks-automatic"
-cluster_name        = "aks-automatic-corp"
+resource_group_name   = "rg-aks-automatic"
+create_resource_group = false
+cluster_name          = "aks-automatic-corp"
+system_node_vm_size   = "Standard_D2s_v5"
 
 # BYO VNet is always true for Corp. The VNet is pre-provisioned by vending
 enable_byo_vnet              = true
 external_node_subnet_id      = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-nodes"
 external_apiserver_subnet_id = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-apiserver"
 external_pe_subnet_id        = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-private-endpoints"
+# Optional AGC managed add-on (public preview on AKS Automatic, public frontend today)
+# enable_app_gateway_for_containers = true
+# external_agc_subnet_id            = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-agc"
 
 # Egress through hub Azure Firewall (Corp default)
 egress_type         = "userDefinedRouting"
@@ -64,5 +69,7 @@ tags = {
 # apiserver_subnet_address_prefix = "10.10.4.0/28"
 # pe_subnet_name                  = "snet-private-endpoints"
 # pe_subnet_address_prefix        = "10.10.12.0/24"
+# agc_subnet_name                 = "snet-agc"
+# agc_subnet_address_prefix       = "10.10.8.0/24"
 # egress_type                     = "userDefinedRouting"
 # firewall_private_ip             = "10.10.8.4"

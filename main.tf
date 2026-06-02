@@ -3,6 +3,7 @@
 # =============================================================================
 
 resource "azapi_resource" "rg" {
+  count     = var.create_resource_group ? 1 : 0
   type      = "Microsoft.Resources/resourceGroups@2024-03-01"
   name      = var.resource_group_name
   location  = var.location
@@ -29,8 +30,8 @@ resource "azapi_resource" "rg" {
 resource "azapi_resource" "aks" {
   type      = "Microsoft.ContainerService/managedClusters@2025-05-01"
   name      = var.cluster_name
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   # Identity type is determined by whether a custom private DNS zone is used.
@@ -65,6 +66,7 @@ resource "azapi_resource" "aks" {
           mode         = "System"
           osType       = "Linux"
           osSKU        = "AzureLinux"
+          vmSize       = var.system_node_vm_size
           vnetSubnetID = local.node_subnet_id # null → managed VNet
         }
       ]
@@ -107,12 +109,22 @@ resource "azapi_resource" "aks" {
       # ----- Ingress - Application Routing (managed NGINX) ----------------------
       # Preconfigured in Automatic. Optionally wire Azure DNS zones for
       # automatic DNS record management, and Azure Key Vault for TLS certs.
-      ingressProfile = {
-        webAppRouting = {
-          enabled            = true
-          dnsZoneResourceIds = local.dns_zone_ids
-        }
-      }
+      ingressProfile = merge(
+        {
+          webAppRouting = {
+            enabled            = true
+            dnsZoneResourceIds = local.dns_zone_ids
+          }
+        },
+        var.enable_app_gateway_for_containers ? {
+          applicationLoadBalancer = {
+            enabled = true
+          }
+          gatewayAPI = {
+            installation = "Standard"
+          }
+        } : {}
+      )
 
       # ----- Ingress - Istio service mesh (optional) ----------------------------
       serviceMeshProfile = var.enable_service_mesh ? {
@@ -289,7 +301,7 @@ resource "azapi_resource" "aks" {
     }
 
     precondition {
-      condition     = var.enable_byo_vnet || (var.external_node_subnet_id == null && var.external_apiserver_subnet_id == null && var.external_pe_subnet_id == null)
+      condition     = var.enable_byo_vnet || (var.external_node_subnet_id == null && var.external_apiserver_subnet_id == null && var.external_pe_subnet_id == null && var.external_agc_subnet_id == null)
       error_message = "external_*_subnet_id variables cannot be set when enable_byo_vnet = false. External subnets require enable_byo_vnet = true."
     }
 
@@ -306,6 +318,11 @@ resource "azapi_resource" "aks" {
     precondition {
       condition     = !var.enable_container_insights || var.log_analytics_workspace_id != null
       error_message = "log_analytics_workspace_id is required when enable_container_insights = true."
+    }
+
+    precondition {
+      condition     = !var.enable_app_gateway_for_containers || !var.enable_byo_vnet || local.agc_subnet_id != null
+      error_message = "external_agc_subnet_id is required when enable_app_gateway_for_containers = true with external BYO subnets. In standalone network mode, the module creates the delegated AGC subnet."
     }
 
     precondition {
@@ -361,8 +378,8 @@ resource "azapi_resource" "prometheus_alerts" {
   count     = var.enable_prometheus_alerts ? 1 : 0
   type      = "Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01"
   name      = "${var.cluster_name}-alerts"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   schema_validation_enabled = false

@@ -46,8 +46,8 @@ resource "azapi_resource" "acr" {
   count     = var.create_acr ? 1 : 0
   type      = "Microsoft.ContainerRegistry/registries@2023-07-01"
   name      = var.acr_name
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {
@@ -81,8 +81,8 @@ resource "azapi_resource" "acr_pe" {
   count     = var.create_acr && local.pe_subnet_id != null ? 1 : 0
   type      = "Microsoft.Network/privateEndpoints@2024-05-01"
   name      = "pe-${var.acr_name}"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {
@@ -137,8 +137,8 @@ resource "azapi_resource" "keyvault" {
   count     = var.create_keyvault ? 1 : 0
   type      = "Microsoft.KeyVault/vaults@2023-07-01"
   name      = var.keyvault_name
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {
@@ -176,8 +176,8 @@ resource "azapi_resource" "kv_pe" {
   count     = var.create_keyvault && local.pe_subnet_id != null ? 1 : 0
   type      = "Microsoft.Network/privateEndpoints@2024-05-01"
   name      = "pe-${var.keyvault_name}"
-  location  = azapi_resource.rg.location
-  parent_id = azapi_resource.rg.id
+  location  = local.rg_location
+  parent_id = local.rg_id
   tags      = local.tags
 
   body = {
