@@ -55,7 +55,7 @@ The module supports:
 
 - BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints). This module implements the node, API server, optional AGC, and private endpoint subnets in standalone mode, or consumes external subnet IDs in vending mode.
 - Two egress options: User-Defined Routing through hub firewall (Corp default) and Standard Load Balancer (dev/test only). Managed NAT Gateway available only with AKS-managed VNet.
-- Three ingress options: Application Routing add-on (managed NGINX, preconfigured), Application Gateway for Containers managed add-on (optional public preview on AKS Automatic), and Istio service mesh (optional).
+- Default ingress: Application Gateway for Containers managed add-on (public preview on AKS Automatic). Managed NGINX Application Routing is opt-in via `enable_managed_nginx` and disabled when AGC is enabled.
 - Private cluster with VNet-integrated API server
 - Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
 - HTTP proxy support for TLS-intercepting proxy environments ([docs](https://learn.microsoft.com/azure/aks/http-proxy))
@@ -211,7 +211,7 @@ flowchart TB
 
 | # | Flow | Path | Notes |
 |---|---|---|---|
-| 1-2 | **Ingress (Corp)** | Corp User -> ExpressRoute -> Hub -> Peering -> Internal LB -> App Routing (NGINX) -> Pods | Fully private via internal LB. AGC is optional public preview on AKS Automatic but AGC frontends are public today. |
+| 1-2 | **Ingress (AGC default)** | Client -> AGC public frontend -> ALB Controller -> Pods | AGC is the module default/canonical ingress. Managed NGINX is opt-in and off when AGC is enabled. |
 | 3-4 | **Egress** | Pods -> UDR -> Hub Azure Firewall -> Internet | FQDN-filtered via `AzureKubernetesService` tag |
 | 5 | **API access** | DevOps -> ExpressRoute -> Hub -> Peering -> API Server ILB | VNet-integrated; private cluster uses `private.<region>.azmk8s.io` DNS zone |
 | 6 | **PaaS access** | Pods -> Private Endpoints (ACR, Key Vault, SQL, Storage) | Workload Identity authentication, no public access |
@@ -308,9 +308,9 @@ AKS Automatic supports three ingress options, but they do not all use the same A
 
 #### Application Gateway for Containers (Gateway API, L7)
 
-> **Preview caveat:** The AKS managed Application Gateway for Containers add-on is public preview on AKS Automatic. Keep `enable_app_gateway_for_containers = false` unless the consumer accepts preview support and AGC cost.
+> **Preview caveat:** The AKS managed Application Gateway for Containers add-on is public preview on AKS Automatic. This module intentionally enables AGC by default because it is the canonical ingress posture.
 >
-> **Corp caveat:** AGC frontends do not support private IP addresses today; frontends expose a public FQDN. For ALZ Corp scenarios requiring fully private ingress, use **Application Routing add-on with internal LB** or **Istio ingress gateway in Internal mode**.
+> **Corp caveat:** AGC frontends do not support private IP addresses today; frontends expose a public FQDN. If a scenario requires fully private ingress, explicitly disable AGC and opt into managed NGINX or Istio internal ingress.
 
 AGC is Azure's L7 load balancer for AKS, built on the Kubernetes Gateway API. The managed add-on deploys the ALB Controller; Kubernetes `ApplicationLoadBalancer`, `Gateway`, and `HTTPRoute` resources then create and configure the Azure Application Gateway for Containers resources.
 
@@ -330,20 +330,21 @@ Client -> AGC Public Frontend -> ALB Controller -> Pods
 | Identity | `applicationloadbalancer-<cluster>` managed identity, auto-configured by add-on |
 | Deployment modes | ALB-managed (`ApplicationLoadBalancer` CRD) or BYO (Terraform/ARM provisioned) |
 
-Enable with:
+AGC is enabled by default. In external-subnet/BYO RG mode, pass the delegated subnet explicitly:
 
 ```hcl
 enable_app_gateway_for_containers = true
-external_agc_subnet_id            = "/subscriptions/.../subnets/snet-agc" # vending mode
+external_agc_subnet_id            = "/subscriptions/.../subnets/snet-agc" # delegated /24
+enable_managed_nginx              = false
 ```
 
-In standalone network mode, the module creates `agc_subnet_name` (`snet-agc`) with `agc_subnet_address_prefix` (`10.10.8.0/24`) and the required `Microsoft.ServiceNetworking/trafficControllers` delegation. In external-subnet mode, the vending pipeline must create and delegate the subnet and pass `external_agc_subnet_id`. The add-on creates the managed identity `applicationloadbalancer-<cluster-name>`; ensure it has permission to join/configure the AGC subnet before applying `ApplicationLoadBalancer` CRDs if the subnet is outside the node resource group.
+In standalone create-resource-group mode, the module creates `agc_subnet_name` (`snet-agc`) with `agc_subnet_address_prefix` (`10.10.8.0/24`) and the required `Microsoft.ServiceNetworking/trafficControllers` delegation. In external-subnet/BYO-RG mode, the vending pipeline must create and delegate the subnet and pass `external_agc_subnet_id`; the module will not create the AGC subnet when `create_resource_group = false`. The add-on creates the managed identity `applicationloadbalancer-<cluster-name>`; ensure it has permission to join/configure the AGC subnet before applying `ApplicationLoadBalancer` CRDs if the subnet is outside the node resource group.
 
 See [Application Gateway for Containers components](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components) and the [AKS managed add-on quickstart](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-addon).
 
-#### Application Routing Add-on (managed NGINX / Ingress API, preconfigured) - recommended for fully private ALZ Corp
+#### Application Routing Add-on (managed NGINX / Ingress API, opt-in)
 
-Always enabled on AKS Automatic. Deploys a managed NGINX-based controller that currently uses `Ingress` resources with `ingressClassName: webapprouting.kubernetes.azure.com`. Supports **internal Azure Load Balancer** for fully private ingress.
+Managed NGINX is opt-in with `enable_managed_nginx = true`. It is automatically disabled when `enable_app_gateway_for_containers = true`, so AGC remains the primary/default ingress. It uses `Ingress` resources with `ingressClassName: webapprouting.kubernetes.azure.com` and supports **internal Azure Load Balancer** for fully private ingress.
 
 ```
 Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing Ingress -> Pods
@@ -357,7 +358,7 @@ Corp User -> ExpressRoute -> Peering -> Internal LB -> App Routing Ingress -> Po
 | Internal-only | `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation on Service |
 | Private frontend | ✅ Fully supported via internal Azure Load Balancer |
 
-Corp considerations: Configure as internal LB only. Create DNS records in the hub Private DNS Zone pointing to the internal LB IP. This is the recommended ingress for ALZ Corp until AGC adds private IP frontend support. AKS will evolve Application Routing toward Gateway API alignment, but it does not use `GatewayClass`, `Gateway`, or `HTTPRoute` today.
+Corp considerations: Configure as internal LB only when AGC is disabled. Create DNS records in the hub Private DNS Zone pointing to the internal LB IP. AKS will evolve Application Routing toward Gateway API alignment, but it does not use `GatewayClass`, `Gateway`, or `HTTPRoute` today.
 
 #### Istio Service Mesh Ingress Gateway (optional)
 
@@ -493,13 +494,13 @@ Azure Firewall sizing: minimum 20 frontend public IPs in production to avoid SNA
 
 ### Cost
 
-AKS Automatic has an irreducible cost floor: the mandatory **Standard** control-plane tier (about **$73/month**) plus at least one system node. This module keeps optional paid features off by default: `enable_defender = false`, `enable_cost_analysis = false`, `enable_prometheus = false`, `enable_prometheus_alerts = false`, `enable_container_insights = false`, and `enable_app_gateway_for_containers = false`.
+AKS Automatic has an irreducible cost floor: the mandatory **Standard** control-plane tier (about **$73/month**) plus at least one system node. AGC is enabled by default as the canonical ingress and adds its own service cost. Other optional paid features remain off by default: `enable_defender = false`, `enable_cost_analysis = false`, `enable_prometheus = false`, `enable_prometheus_alerts = false`, and `enable_container_insights = false`.
 
 Cheap levers:
 
 - `system_node_vm_size = "Standard_D2s_v5"` by default. This is the smallest reliable D-series choice for AKS Automatic/NAP default pools. NAP's default `NodePool` constrains user nodes to SKU family `D`, so burstable B-series (for example `Standard_B2s`) is not the safe default.
 - Use `create_resource_group = false` for ALZ-adopted resource groups to avoid state ownership of shared RGs.
-- Keep AGC, Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault disabled unless the demo explicitly needs them.
+- Keep Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault disabled unless the demo explicitly needs them. AGC is on by default for ingress standardisation.
 - To constrain NAP user nodes further, apply Karpenter `NodePool` / `AKSNodeClass` CRDs after cluster creation (for example with `karpenter.azure.com/sku-name`). This module does not add a Kubernetes provider to avoid kube-auth complexity.
 
 ### Auto-Upgrade and Maintenance
@@ -555,7 +556,7 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 - Image Cleaner
 - Deployment Safeguards (Azure Policy)
 - Managed NAT Gateway (when using managed VNet)
-- Application Routing add-on (managed NGINX)
+- Application Gateway for Containers managed add-on (default ingress)
 - Node auto-repair
 - Standard tier with uptime SLA
 - ReadOnly node resource group
@@ -570,7 +571,7 @@ The following are always enabled on AKS Automatic and cannot be disabled or chan
 | Maintenance windows | `maintenanceConfigurations` |
 | Networking | BYO VNet, pod/service CIDRs, DNS service IP, HTTP proxy |
 | Egress | UDR through hub firewall (Corp default), Load Balancer (dev/test only) |
-| Ingress | DNS zones for App Routing, Istio. AGC documented for reference but not yet supported on AKS Automatic. |
+| Ingress | AGC default via `enable_app_gateway_for_containers`; managed NGINX opt-in via `enable_managed_nginx`; Istio optional. |
 | Private cluster | `enable_private_cluster`, `authorized_ip_ranges` |
 | Monitoring | Prometheus, Container Insights, Managed Grafana, cost analysis |
 | Scaling | KEDA, VPA, HPA, autoscaler profile |
@@ -663,7 +664,7 @@ Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
   snet-aks-nodes         10.10.0.0/22    NSG + UDR -> Hub Firewall
     AKS Automatic cluster
       System Pool + Karpenter NodePools (Azure Linux)
-      App Routing (Ingress API) | Istio | AGC (optional, public frontend today)
+      AGC default (Gateway API) | Managed NGINX opt-in | Istio optional
       Pods (overlay: 10.244.0.0/16, services: 10.245.0.0/16)
 
   snet-aks-apiserver     10.10.4.0/28    Delegated: Microsoft.ContainerService/managedClusters
@@ -683,7 +684,7 @@ Spoke VNet: 10.10.0.0/16 (peered to Hub VNet)
 |---|---|---|---|
 | Node subnet | /24 (254 nodes) | /22 (1,022 nodes) | One IP per node. Pod IPs from overlay, not this subnet. |
 | API server subnet | /28 (11 usable) | /28 | API server endpoint only. /28 is sufficient. |
-| AGC subnet | /24 (256 IPs) | /24 | Required by AGC. Dedicated and delegated. |
+| AGC subnet | /24 (256 IPs) | /24 | Required by default AGC ingress. Dedicated and delegated to `Microsoft.ServiceNetworking/trafficControllers`. |
 | Private endpoints | /24 | /24 | ACR, Key Vault, Storage, database PEs. |
 
 ### Subnet Requirements

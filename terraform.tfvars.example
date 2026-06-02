@@ -18,9 +18,10 @@ enable_byo_vnet              = true
 external_node_subnet_id      = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-nodes"
 external_apiserver_subnet_id = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-apiserver"
 external_pe_subnet_id        = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-private-endpoints"
-# Optional AGC managed add-on (public preview on AKS Automatic, public frontend today)
-# enable_app_gateway_for_containers = true
-# external_agc_subnet_id            = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-agc"
+# AGC managed add-on is the default ingress (public preview on AKS Automatic, public frontend today)
+enable_app_gateway_for_containers = true
+external_agc_subnet_id            = "/subscriptions/<spoke-sub>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-agc"
+enable_managed_nginx              = false
 
 # Egress through hub Azure Firewall (Corp default)
 egress_type         = "userDefinedRouting"
