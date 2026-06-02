@@ -8,23 +8,28 @@ on:
         required: true
         type: choice
         options:
-          - dev
-          - staging
           - prod
+      apply:
+        description: "Apply the saved plan after planning"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   id-token: write
   contents: read
 
-jobs:
-  decide-runner:
-    uses: martinopedal/github-runners-alz-corp-cookbook/.github/workflows/decide-runner.yml@v1
-    with:
-      self-hosted-labels: '["self-hosted", "public-linux"]'
+env:
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}
+  TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}
 
+jobs:
   plan:
     name: Terraform Plan
-    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
+    runs-on: [self-hosted, linux, demo-private, sub9]
     environment: ${{ inputs.environment }}
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
@@ -41,21 +46,31 @@ jobs:
         uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}
 
-      # Configure backend via environment secrets:
-      #   -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RG }}"
-      #   -backend-config="storage_account_name=${{ secrets.TF_BACKEND_SA }}"
-      #   -backend-config="container_name=tfstate"
-      #   -backend-config="key=aks-automatic-${{ inputs.environment }}.tfstate"
-      # See backend.tf.example for the backend block.
       - name: Terraform Init
-        run: terraform init
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TFSTATE_CONTAINER_NAME }}" \
+            -backend-config="key=aks-automatic-${{ inputs.environment }}.tfstate" \
+            -backend-config="subscription_id=${{ vars.TFSTATE_SUBSCRIPTION_ID }}" \
+            -backend-config="tenant_id=${{ vars.AZURE_TENANT_ID }}" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Import existing AGC resources if present
+        run: |
+          terraform import -var-file="env/${{ inputs.environment }}.tfvars" 'azapi_resource.agc[0]' "/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}/resourceGroups/rg-sreagt-dmo-swc-001/providers/Microsoft.ServiceNetworking/trafficControllers/aks-sreagt-store-dmo-swc-001-agc" || true
+          terraform import -var-file="env/${{ inputs.environment }}.tfvars" 'azapi_resource.agc_frontend[0]' "/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}/resourceGroups/rg-sreagt-dmo-swc-001/providers/Microsoft.ServiceNetworking/trafficControllers/aks-sreagt-store-dmo-swc-001-agc/frontends/frontend" || true
+          terraform import -var-file="env/${{ inputs.environment }}.tfvars" 'azapi_resource.agc_association[0]' "/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}/resourceGroups/rg-sreagt-dmo-swc-001/providers/Microsoft.ServiceNetworking/trafficControllers/aks-sreagt-store-dmo-swc-001-agc/associations/association" || true
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -out=tfplan -detailed-exitcode
+        run: terraform plan -input=false -var-file="env/${{ inputs.environment }}.tfvars" -out=tfplan -detailed-exitcode
         continue-on-error: true
 
       - name: Fail on plan error
@@ -74,8 +89,8 @@ jobs:
   apply:
     name: Terraform Apply
     needs: plan
-    if: needs.plan.outputs.plan_exit_code == '2'
-    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
+    if: inputs.apply && needs.plan.outputs.plan_exit_code == '2'
+    runs-on: [self-hosted, linux, demo-private, sub9]
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
@@ -90,8 +105,8 @@ jobs:
         uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}
 
       - name: Download Plan
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
@@ -99,7 +114,17 @@ jobs:
           name: tfplan-${{ inputs.environment }}
 
       - name: Terraform Init
-        run: terraform init
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TFSTATE_CONTAINER_NAME }}" \
+            -backend-config="key=aks-automatic-${{ inputs.environment }}.tfstate" \
+            -backend-config="subscription_id=${{ vars.TFSTATE_SUBSCRIPTION_ID }}" \
+            -backend-config="tenant_id=${{ vars.AZURE_TENANT_ID }}" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -input=false -auto-approve tfplan
