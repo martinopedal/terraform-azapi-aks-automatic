@@ -178,6 +178,13 @@ resource "azapi_resource" "aks" {
         nodeOSUpgradeChannel = var.node_os_upgrade_channel
       }
 
+      # ----- Bootstrap (network-isolated) --------------------------------------
+      # When outboundType is "none" or "block", AKS treats the cluster as
+      # network-isolated and requires artifacts to be cached locally via ACR.
+      bootstrapProfile = local.outbound_type == "none" ? {
+        artifactSource = "Cache"
+      } : null
+
       # ----- Monitoring ---------------------------------------------------------
       azureMonitorProfile = {
         metrics = {
