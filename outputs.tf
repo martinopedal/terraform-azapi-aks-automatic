@@ -24,17 +24,17 @@ output "cluster_private_fqdn" {
 
 output "provisioning_state" {
   description = "Current provisioning state of the cluster."
-  value       = azapi_resource.aks.output.properties.provisioningState
+  value       = try(azapi_resource.aks.output.properties.provisioningState, null)
 }
 
 output "kubernetes_version" {
   description = "Kubernetes version running on the cluster."
-  value       = azapi_resource.aks.output.properties.currentKubernetesVersion
+  value       = try(azapi_resource.aks.output.properties.currentKubernetesVersion, null)
 }
 
 output "node_resource_group" {
   description = "Auto-generated node resource group name."
-  value       = azapi_resource.aks.output.properties.nodeResourceGroup
+  value       = try(azapi_resource.aks.output.properties.nodeResourceGroup, null)
 }
 
 output "oidc_issuer_url" {
@@ -44,7 +44,7 @@ output "oidc_issuer_url" {
 
 output "kubelet_identity_object_id" {
   description = "Object ID of the kubelet managed identity (used for AcrPull, storage access)."
-  value       = azapi_resource.aks.output.properties.identityProfile.kubeletidentity.objectId
+  value       = try(azapi_resource.aks.output.properties.identityProfile.kubeletidentity.objectId, null)
 }
 
 output "app_routing_identity_object_id" {

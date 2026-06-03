@@ -251,17 +251,7 @@ resource "azapi_resource" "aks" {
     }
   }
 
-  response_export_values = [
-    "properties.fqdn",
-    "properties.privateFQDN",
-    "properties.provisioningState",
-    "properties.currentKubernetesVersion",
-    "properties.nodeResourceGroup",
-    "properties.oidcIssuerProfile.issuerURL",
-    "properties.identityProfile.kubeletidentity.objectId",
-    "properties.ingressProfile.webAppRouting.identity.objectId",
-    "identity",
-  ]
+  response_export_values = ["*"]
 
   lifecycle {
     prevent_destroy = true
