@@ -6,6 +6,7 @@
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Prerequisites](#prerequisites)
+- [Network egress requirements](#network-egress-requirements)
 - [AS-BUILT Deployment Contract](#as-built-deployment-contract)
 - [Deployment Scenarios](#deployment-scenarios)
 - [Connect to the Cluster](#connect-to-the-cluster)
@@ -121,6 +122,14 @@ az provider register --namespace Microsoft.ContainerService
 - **Log Analytics workspace:** Required when `enable_defender = true` or `enable_container_insights = true`. Pass the workspace resource ID via `log_analytics_workspace_id`.
 - **UserAssigned identity:** Required when `private_dns_zone_id` is a custom resource ID. Create a managed identity with `Private DNS Zone Contributor` on the zone and pass its resource ID via `user_assigned_identity_id`.
 - **CIDR coordination:** Verify that VNet, pod, and service CIDRs do not overlap with hub VNet, other spokes, or on-premises networks. See [CIDR Coordination](#cidr-coordination).
+
+---
+
+## Network egress requirements
+
+Force-tunneled ALZ spokes route AKS node, NAP, kubelet, image pull, package, and time-sync egress through the hub Azure Firewall. Open the AKS-specific FQDNs in [EGRESS.md](EGRESS.md) before cluster creation or scale-out; missing MCR, AKS package, Ubuntu package mirror, and NTP egress can prevent nodes from provisioning.
+
+The canonical implemented firewall source for this estate is `alz-firewall-ops/FIREWALL-EGRESS-IMPLEMENTED.md`.
 
 ---
 
