@@ -181,8 +181,11 @@ resource "azapi_resource" "aks" {
       # ----- Bootstrap (network-isolated) --------------------------------------
       # When outboundType is "none" or "block", AKS treats the cluster as
       # network-isolated and requires artifacts to be cached locally via ACR.
+      # With BYO VNet, a pre-existing ACR must be provided (managed ACR only
+      # works with AKS-managed VNet).
       bootstrapProfile = local.outbound_type == "none" ? {
-        artifactSource = "Cache"
+        artifactSource       = "Cache"
+        containerRegistryId  = var.bootstrap_acr_id
       } : null
 
       # ----- Monitoring ---------------------------------------------------------

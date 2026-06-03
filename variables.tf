@@ -385,6 +385,22 @@ variable "firewall_private_ip" {
   }
 }
 
+variable "bootstrap_acr_id" {
+  description = <<-EOT
+    Resource ID of a pre-existing ACR for bootstrap artifact caching. Required
+    when egress_type = "none" with BYO VNet (AKS-managed ACR only works with
+    AKS-managed VNet). The ACR should be reachable from the node subnet (via PE
+    or hub firewall rule).
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.bootstrap_acr_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.ContainerRegistry/registries/[^/]+$", var.bootstrap_acr_id))
+    error_message = "bootstrap_acr_id must be a valid ACR resource ID."
+  }
+}
+
 # =============================================================================
 # Network CIDRs (Overlay)
 # =============================================================================
