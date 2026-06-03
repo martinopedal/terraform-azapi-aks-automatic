@@ -43,11 +43,13 @@ resource "azapi_resource" "aks" {
 
   body = {
     sku = {
-      name = "Automatic"
+      name = "Base"
       tier = "Standard"
     }
 
     properties = {
+
+      dnsPrefix = var.cluster_name
 
       # ----- Kubernetes version ------------------------------------------------
       kubernetesVersion = var.kubernetes_version
@@ -178,15 +180,7 @@ resource "azapi_resource" "aks" {
         nodeOSUpgradeChannel = var.node_os_upgrade_channel
       }
 
-      # ----- Bootstrap (network-isolated) --------------------------------------
-      # When outboundType is "none" or "block", AKS treats the cluster as
-      # network-isolated and requires artifacts to be cached locally via ACR.
-      # With BYO VNet, a pre-existing ACR must be provided (managed ACR only
-      # works with AKS-managed VNet).
-      bootstrapProfile = local.outbound_type == "none" ? {
-        artifactSource       = "Cache"
-        containerRegistryId  = var.bootstrap_acr_id
-      } : null
+
 
       # ----- Monitoring ---------------------------------------------------------
       azureMonitorProfile = {
@@ -363,6 +357,7 @@ resource "azapi_resource" "maintenance_config" {
 
   body = {
     properties = {
+
       maintenanceWindow = {
         schedule = {
           weekly = var.maintenance_window.day_of_week != null ? {
@@ -395,6 +390,7 @@ resource "azapi_resource" "prometheus_alerts" {
 
   body = {
     properties = {
+
       clusterName = azapi_resource.aks.name
       description = "Recommended AKS cluster health alerts"
       enabled     = true

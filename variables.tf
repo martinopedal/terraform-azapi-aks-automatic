@@ -366,7 +366,7 @@ variable "egress_type" {
     egress control through the hub firewall.
   EOT
   type        = string
-  default     = "none"
+  default     = "userDefinedRouting"
 
   validation {
     condition     = contains(["none", "userDefinedRouting", "loadBalancer"], var.egress_type)
