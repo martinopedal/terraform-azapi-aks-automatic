@@ -824,12 +824,12 @@ If the ALZ uses a third-party NVA instead of Azure Firewall, the `AzureKubernete
 > [!IMPORTANT]
 > **The hub firewall policy must not contain a network-layer catch-all `Deny` that matches TCP 80/443.**
 >
-> Azure Firewall evaluates **all network rule collections (across every rule collection group, by priority) before any application rule collection.** A "deny-all for audit" network rule with `protocols = ["Any"]`, `source = ["*"]`, `destination = ["*"]`, `ports = ["*"]` therefore matches the node's HTTP/S egress in the **network** phase and short-circuits the `AzureKubernetesService` FQDN-tag **application** allow — which lives in the application phase that is now never reached. Every AKS node then fails CSE bootstrap with `VMExtensionProvisioningError` / `VMExtensionError_OutboundConnFail` (exit 50) **even though the FQDN allow rule is present and correct**.
+> Azure Firewall evaluates **all network rule collections (across every rule collection group, by priority) before any application rule collection.** A "deny-all for audit" network rule with `protocols = ["Any"]`, `source = ["*"]`, `destination = ["*"]`, `ports = ["*"]` therefore matches the node's HTTP/S egress in the **network** phase and short-circuits the `AzureKubernetesService` FQDN-tag **application** allow, which lives in the application phase that is now never reached. Every AKS node then fails CSE bootstrap with `VMExtensionProvisioningError` / `VMExtensionError_OutboundConnFail` (exit 50) **even though the FQDN allow rule is present and correct**.
 >
 > Diagnose it in the firewall logs: the node's `10.x` source shows `AZFWNetworkRule` `Deny` entries to `mcr.microsoft.com` / `packages.microsoft.com` edge IPs on :443, with **zero** `AZFWApplicationRule` rows for that source (the application phase was never reached).
 >
 > If you need an explicit audited catch-all deny, **split it** so it does not pre-empt FQDN filtering:
-> 1. an **application** rule collection `Deny` for HTTP/HTTPS (`destination_fqdns = ["*"]`, ports 80/443) — evaluated *after* higher-priority FQDN allow rules; and
+> 1. an **application** rule collection `Deny` for HTTP/HTTPS (`destination_fqdns = ["*"]`, ports 80/443), evaluated *after* higher-priority FQDN allow rules; and
 > 2. a **network** rule collection `Deny` for all other ports/protocols, with `destination_ports` **excluding 80/443** (e.g. `["1-79", "81-442", "444-65535"]`) so HTTP/S falls through to the application phase.
 >
 > This preserves a deny-everything-not-explicitly-allowed posture *and* keeps FQDN application filtering functional.
