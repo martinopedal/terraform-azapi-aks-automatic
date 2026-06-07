@@ -114,7 +114,7 @@ variable "external_node_subnet_id" {
 }
 
 variable "external_apiserver_subnet_id" {
-  description = "Resource ID of a pre-provisioned API server subnet (must be delegated to Microsoft.ContainerService/managedClusters)."
+  description = "Resource ID of a pre-provisioned API server subnet. MUST be delegated to Microsoft.ContainerService/managedClusters, MUST be dedicated (minimum /28), and MUST NOT have a Route Table attached. Required when external_node_subnet_id is set."
   type        = string
   default     = null
 

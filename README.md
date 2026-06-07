@@ -824,12 +824,12 @@ If the ALZ uses a third-party NVA instead of Azure Firewall, the `AzureKubernete
 > [!IMPORTANT]
 > **The hub firewall policy must not contain a network-layer catch-all `Deny` that matches TCP 80/443.**
 >
-> Azure Firewall evaluates **all network rule collections (across every rule collection group, by priority) before any application rule collection.** A "deny-all for audit" network rule with `protocols = ["Any"]`, `source = ["*"]`, `destination = ["*"]`, `ports = ["*"]` therefore matches the node's HTTP/S egress in the **network** phase and short-circuits the `AzureKubernetesService` FQDN-tag **application** allow — which lives in the application phase that is now never reached. Every AKS node then fails CSE bootstrap with `VMExtensionProvisioningError` / `VMExtensionError_OutboundConnFail` (exit 50) **even though the FQDN allow rule is present and correct**.
+> Azure Firewall evaluates **all network rule collections (across every rule collection group, by priority) before any application rule collection.** A "deny-all for audit" network rule with `protocols = ["Any"]`, `source = ["*"]`, `destination = ["*"]`, `ports = ["*"]` therefore matches the node's HTTP/S egress in the **network** phase and short-circuits the `AzureKubernetesService` FQDN-tag **application** allow, which lives in the application phase that is now never reached. Every AKS node then fails CSE bootstrap with `VMExtensionProvisioningError` / `VMExtensionError_OutboundConnFail` (exit 50) **even though the FQDN allow rule is present and correct**.
 >
 > Diagnose it in the firewall logs: the node's `10.x` source shows `AZFWNetworkRule` `Deny` entries to `mcr.microsoft.com` / `packages.microsoft.com` edge IPs on :443, with **zero** `AZFWApplicationRule` rows for that source (the application phase was never reached).
 >
 > If you need an explicit audited catch-all deny, **split it** so it does not pre-empt FQDN filtering:
-> 1. an **application** rule collection `Deny` for HTTP/HTTPS (`destination_fqdns = ["*"]`, ports 80/443) — evaluated *after* higher-priority FQDN allow rules; and
+> 1. an **application** rule collection `Deny` for HTTP/HTTPS (`destination_fqdns = ["*"]`, ports 80/443), evaluated *after* higher-priority FQDN allow rules; and
 > 2. a **network** rule collection `Deny` for all other ports/protocols, with `destination_ports` **excluding 80/443** (e.g. `["1-79", "81-442", "444-65535"]`) so HTTP/S falls through to the application phase.
 >
 > This preserves a deny-everything-not-explicitly-allowed posture *and* keeps FQDN application filtering functional.
@@ -998,8 +998,20 @@ The azapi provider communicates directly with the Azure Resource Manager REST AP
 
 ### Scenario 1: External Subnets + UDR through Hub Firewall (Corp default)
 
+**Prerequisites for external-subnet mode:**
+- **Both `external_node_subnet_id` and `external_apiserver_subnet_id` must be set** (module enforces this via precondition).
+- **API server subnet requirements:**
+  - Must be dedicated to the API server (minimum `/28` size).
+  - Must be delegated to `Microsoft.ContainerService/managedClusters`.
+  - **Must NOT have a Route Table** attached (AKS API Server VNet Integration does not support UDR on the API server subnet).
+  - Must be in the same VNet as the node subnet.
+- **Node subnet requirements:**
+  - NSG attached (can be empty; AKS auto-injects required rules).
+  - Route Table attached with default route to hub firewall when using `egress_type = "userDefinedRouting"`.
+- **Authentication:** AKS Automatic enforces Entra Azure RBAC (`enableAzureRBAC = true`, `disableLocalAccounts = true`). Local accounts are disabled; kubectl access requires Azure RBAC role assignments.
+
 ```hcl
-enable_byo_vnet            = true
+enable_byo_vnet              = true
 external_node_subnet_id      = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-nodes"
 external_apiserver_subnet_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-apiserver"
 firewall_private_ip          = "10.0.1.4"
