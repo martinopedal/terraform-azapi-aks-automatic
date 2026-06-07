@@ -998,8 +998,20 @@ The azapi provider communicates directly with the Azure Resource Manager REST AP
 
 ### Scenario 1: External Subnets + UDR through Hub Firewall (Corp default)
 
+**Prerequisites for external-subnet mode:**
+- **Both `external_node_subnet_id` and `external_apiserver_subnet_id` must be set** (module enforces this via precondition).
+- **API server subnet requirements:**
+  - Must be dedicated to the API server (minimum `/28` size).
+  - Must be delegated to `Microsoft.ContainerService/managedClusters`.
+  - **Must NOT have a Route Table** attached (AKS API Server VNet Integration does not support UDR on the API server subnet).
+  - Must be in the same VNet as the node subnet.
+- **Node subnet requirements:**
+  - NSG attached (can be empty; AKS auto-injects required rules).
+  - Route Table attached with default route to hub firewall when using `egress_type = "userDefinedRouting"`.
+- **Authentication:** AKS Automatic enforces Entra Azure RBAC (`enableAzureRBAC = true`, `disableLocalAccounts = true`). Local accounts are disabled; kubectl access requires Azure RBAC role assignments.
+
 ```hcl
-enable_byo_vnet            = true
+enable_byo_vnet              = true
 external_node_subnet_id      = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-nodes"
 external_apiserver_subnet_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/snet-aks-apiserver"
 firewall_private_ip          = "10.0.1.4"
