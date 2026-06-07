@@ -10,14 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  decide-runner:
-    uses: martinopedal/github-runners-alz-corp-cookbook/.github/workflows/decide-runner.yml@v1
-    with:
-      self-hosted-labels: '["self-hosted", "public-linux"]'
-
   terraform:
     name: Terraform Validate
-    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -41,7 +36,7 @@ jobs:
 
   style:
     name: Style Check
-    runs-on: ${{ fromJSON(vars.RUNS_ON_LINUX_PERSONAL || '["self-hosted","personal-linux"]') }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2

@@ -385,6 +385,7 @@ variable "firewall_private_ip" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "bootstrap_acr_id" {
   description = <<-EOT
     Resource ID of a pre-existing ACR for bootstrap artifact caching. Required
