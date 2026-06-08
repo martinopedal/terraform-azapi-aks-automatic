@@ -105,3 +105,35 @@ resource "azapi_resource" "role_agc_subnet_join" {
     }
   }
 }
+
+# =============================================================================
+# WAF Policy (Optional)
+#
+# AGC WAF is preview and not available in all regions. As of 2026-06-08:
+# - Verified NOT available in Sweden Central
+# - Check regional availability before enabling
+#
+# If enabled in an unsupported region, Terraform will fail with a location error.
+# =============================================================================
+
+resource "azurerm_web_application_firewall_policy" "agc_waf" {
+  count               = var.enable_app_gateway_for_containers && var.enable_agc_waf ? 1 : 0
+  name                = "${local.agc_name}-waf"
+  location            = local.rg_location
+  resource_group_name = local.rg_name
+  tags                = local.tags
+
+  policy_settings {
+    enabled                     = true
+    mode                        = var.agc_waf_mode
+    request_body_check          = true
+    max_request_body_size_in_kb = 128
+  }
+
+  managed_rules {
+    managed_rule_set {
+      type    = "OWASP"
+      version = "3.2"
+    }
+  }
+}

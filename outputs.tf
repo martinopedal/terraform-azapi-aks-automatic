@@ -144,6 +144,11 @@ output "app_gateway_for_containers_frontend_id" {
   value       = try(azapi_resource.agc_frontend[0].id, null)
 }
 
+output "app_gateway_for_containers_frontend_fqdn" {
+  description = "Public FQDN of the AGC frontend (null when AGC is disabled). This is the customer entry point for ingress traffic."
+  value       = try(jsondecode(azapi_resource.agc_frontend[0].output).properties.fqdn, null)
+}
+
 output "app_gateway_for_containers_association_id" {
   description = "Resource ID of the AGC subnet association child resource (null when AGC is disabled)."
   value       = try(azapi_resource.agc_association[0].id, null)
@@ -152,4 +157,9 @@ output "app_gateway_for_containers_association_id" {
 output "alb_controller_extension_id" {
   description = "Resource ID of the ALB Controller Kubernetes extension (null when AGC is disabled)."
   value       = try(azapi_resource.alb_controller_extension[0].id, null)
+}
+
+output "agc_waf_policy_id" {
+  description = "Resource ID of the AGC WAF policy (null when WAF is disabled). Note: AGC WAF is preview and not available in all regions."
+  value       = try(azurerm_web_application_firewall_policy.agc_waf[0].id, null)
 }
