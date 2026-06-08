@@ -492,6 +492,31 @@ variable "app_gateway_for_containers_association_name" {
   }
 }
 
+variable "enable_agc_waf" {
+  description = <<-EOT
+    Enable Azure WAF Policy for AGC (OWASP managed ruleset).
+    
+    **Regional availability**: AGC WAF is preview and not available in all regions.
+    Verified as NOT available in Sweden Central as of 2026-06-08.
+    
+    If enabled in an unsupported region, Terraform will fail with a region error.
+    Check availability: az provider show -n Microsoft.Network --query "resourceTypes[?resourceType=='ApplicationGatewayWebApplicationFirewallPolicies'].locations"
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "agc_waf_mode" {
+  description = "WAF mode: Prevention (blocks malicious requests) or Detection (logs only). Ignored when enable_agc_waf = false."
+  type        = string
+  default     = "Prevention"
+
+  validation {
+    condition     = contains(["Prevention", "Detection"], var.agc_waf_mode)
+    error_message = "agc_waf_mode must be 'Prevention' or 'Detection'."
+  }
+}
+
 variable "enable_managed_nginx" {
   description = "Enable the AKS managed NGINX Application Routing add-on. Ignored when enable_app_gateway_for_containers = true so AGC remains primary."
   type        = bool
