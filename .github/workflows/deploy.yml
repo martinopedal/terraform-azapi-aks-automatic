@@ -133,7 +133,24 @@ jobs:
     name: Apply Store App Manifests
     needs: apply
     if: inputs.apply && needs.plan.outputs.plan_exit_code == '2'
-    runs-on: [self-hosted, linux, demo-private, sub9]
+    # CRITICAL: Private API Server VNet Integration Constraint
+    # 
+    # The cluster API server (10.16.0.132) is ONLY reachable from the AKS node subnet
+    # (snet-aks-nodes, 10.16.0.192/26) due to VNet Integration private cluster config.
+    # Consumption ACA runners (demo-private, sub9) and other non-node-subnet compute
+    # CANNOT reach the API server and will time out on kubectl commands.
+    # 
+    # REQUIRED FIX: Run in-cluster kubectl steps from node-subnet compute:
+    #   Option A: Self-hosted runner VM/VMSS deployed INTO snet-aks-nodes
+    #   Option B: Kubernetes Job deployed into the cluster (runs on node subnet by definition)
+    #   Option C: Azure Container Instances with VNet integration on snet-aks-nodes
+    #
+    # CURRENT STATE: Runs on [self-hosted, linux, demo-private, sub9] which is NOT
+    # in the node subnet and CANNOT reach the private API server. This job will FAIL
+    # with connection timeout errors until the runner placement is corrected.
+    #
+    # See docs/private-api-access.md for detailed architecture and remediation steps.
+    runs-on: [self-hosted, linux, demo-private, sub9]  # ⚠️ WRONG - cannot reach private API
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
