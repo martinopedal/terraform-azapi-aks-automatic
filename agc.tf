@@ -120,7 +120,7 @@ resource "azurerm_web_application_firewall_policy" "agc_waf" {
   count               = var.enable_app_gateway_for_containers && var.enable_agc_waf ? 1 : 0
   name                = "${local.agc_name}-waf"
   location            = local.rg_location
-  resource_group_name = local.rg_name
+  resource_group_name = var.resource_group_name
   tags                = local.tags
 
   policy_settings {
