@@ -1,0 +1,110 @@
+name: "Apply Store App Manifests (Managed Identity)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - prod
+
+permissions:
+  contents: read
+
+jobs:
+  apply-manifests:
+    name: Apply Store App Manifests
+    runs-on: [self-hosted, linux, demo-private, sub9]
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Azure Login (Managed Identity)
+        run: |
+          echo "Logging in with managed identity..."
+          az login --identity
+          az account show
+          az account set --subscription 147f910d-d9c8-40ca-8455-2ea5219765e5
+
+      - name: Install kubectl and kubelogin
+        run: |
+          # Install kubectl if not present
+          if ! command -v kubectl &> /dev/null; then
+            echo "Installing kubectl..."
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+          kubectl version --client
+          
+          # Install kubelogin if not present
+          if ! command -v kubelogin &> /dev/null; then
+            echo "Installing kubelogin..."
+            curl -LO "https://github.com/Azure/kubelogin/releases/download/v0.1.5/kubelogin-linux-amd64.zip"
+            unzip kubelogin-linux-amd64.zip
+            chmod +x bin/linux_amd64/kubelogin
+            sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+            rm -rf bin kubelogin-linux-amd64.zip
+          fi
+          kubelogin --version
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group rg-sreagt-dmo-swc-001 \
+            --name aks-sreagt-store-dmo-swc-001 \
+            --overwrite-existing
+
+      - name: Convert kubeconfig to use managed identity
+        run: |
+          kubelogin convert-kubeconfig -l msi
+
+      - name: Verify cluster connectivity
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Apply manifests
+        run: |
+          kubectl apply -k manifests/
+          echo "Manifests applied successfully"
+
+      - name: Wait for resources
+        run: |
+          echo "Waiting for deployment to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/store-app -n store-app || true
+          
+          echo "Checking deployment status..."
+          kubectl get deployment,pod,service -n store-app
+          
+          echo "Checking Gateway status..."
+          kubectl get gateway -n store-app
+          kubectl describe gateway store-app-gateway -n store-app || true
+          
+          echo "Checking HTTPRoute status..."
+          kubectl get httproute -n store-app
+          kubectl describe httproute store-app-route -n store-app || true
+
+      - name: Get Gateway address
+        run: |
+          echo "Waiting for Gateway to get an address..."
+          for i in {1..30}; do
+            ADDRESS=$(kubectl get gateway store-app-gateway -n store-app -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo "")
+            if [ -n "$ADDRESS" ]; then
+              echo "Gateway address: $ADDRESS"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+          
+          echo "Final Gateway status:"
+          kubectl get gateway store-app-gateway -n store-app -o yaml || true
+
+      - name: Test HTTP endpoint
+        run: |
+          echo "Testing AGC endpoint..."
+          curl -v -m 30 http://cyerdrc8htb8gdha.fz05.alb.azure.com || echo "HTTP test failed (expected if Gateway not ready)"
