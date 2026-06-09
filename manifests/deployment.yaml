@@ -13,15 +13,23 @@ spec:
       labels:
         app: store-app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nginx
-          image: nginxinc/nginx-unprivileged:latest
+          image: crsreagtdmoswc001.azurecr.io/store-nginx:1.22
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 80
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               drop:
                 - ALL
+            seccompProfile:
+              type: RuntimeDefault
