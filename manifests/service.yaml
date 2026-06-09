@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: store-app
+  namespace: store-app
+spec:
+  type: ClusterIP
+  selector:
+    app: store-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
