@@ -10,22 +10,17 @@
 ## Access URL
 
 **Public demo URL (public opt-in for this demo):**
-```
-https://4.165.251.53.nip.io/
+``` 
+http://4.165.251.53/
 ```
 
 Current internet test result:
 ```bash
-curl -k https://4.165.251.53.nip.io/
-# curl: (35) schannel: failed to receive handshake, SSL/TLS connection failed
-```
-
-HTTP test result:
-```bash
-curl http://4.165.251.53.nip.io/
+curl http://4.165.251.53/
 # curl: (52) Empty reply from server
 ```
 
+Note: `nip.io` was removed from this runbook because Microsoft Defender SmartScreen blocks that domain pattern in many corporate environments.
 This remains escalated to Microsoft Support because internet requests do not reach NGINX backends even though in-cluster routing is healthy.
 
 ---
@@ -39,7 +34,7 @@ This remains escalated to Microsoft Support because internet requests do not rea
 - **Controller**: ingress-nginx v1.11.1 (ns: ingress-nginx)
 - **Image**: `crsreagtdmoswc001.azurecr.io/ingress-nginx/controller:v1.11.1` (mirrored from registry.k8s.io)
 - **Service**: Azure LoadBalancer (public), IP: 4.165.251.53
-- **Ingress**: store-app-ingress (ns: store-app), host 4.165.251.53.nip.io, routes HTTPS to store-app Service on port 8080
+- **Ingress**: store-app-ingress (ns: store-app), canonical host store-app.local plus catch-all rule, routes HTTPS to store-app Service on port 8080
 - **Access**: public endpoint configured; forwarding still under investigation
 
 **AGC (ESCALATED - BLOCKED)**:
@@ -139,10 +134,10 @@ spec:
 ```yaml
 spec:
   rules:
-  - host: 4.165.251.53.nip.io
+  - host: store-app.local
   tls:
   - hosts:
-    - 4.165.251.53.nip.io
+    - store-app.local
 ```
 
 ### Switch to Internal LB
@@ -327,7 +322,7 @@ k describe ingress -n store-app store-app-ingress
 
 **Expected**:
 - `CLASS`: nginx
-- `HOSTS`: store-app.local (or nip.io domain)
+- `HOSTS`: store-app.local (and/or catch-all rule)
 - `ADDRESS`: Node IP or LB IP
 - Events: No errors
 
