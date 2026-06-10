@@ -1,7 +1,7 @@
 # NGINX Ingress Controller
 # Deployed as the working ingress alternative while AGC data-plane bug is escalated to Microsoft Support
 # Controller image mirrored to crsreagtdmoswc001.azurecr.io/ingress-nginx/controller:v1.11.1
-# Service uses internal Azure LoadBalancer (private-by-default)
+# Service is configured for public Azure LoadBalancer exposure for demo browser access
 ---
 apiVersion: v1
 kind: Namespace
@@ -126,9 +126,10 @@ metadata:
   name: ingress-nginx-controller
   namespace: ingress-nginx
   annotations:
-    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz
 spec:
   type: LoadBalancer
+  externalTrafficPolicy: Local
   ports:
   - name: http
     port: 80
