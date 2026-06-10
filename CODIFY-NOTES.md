@@ -81,20 +81,77 @@ frontends fail identically.
 has a data-plane forwarding defect. The HTTPRoute shows Programmed=True, but AGC
 does not forward client HTTP traffic to backends.
 
-**Workaround**: The deployment uses `hostNetwork: true` to run pods on node IPs
-(10.16.0.x), which are VNET-routable. This bypasses the Overlay pod IP issue but
-requires a policy exemption for Deny-Priv-Esc-AKS.
-
-**Status**: Awaiting Microsoft Support escalation. Once fixed, remove `hostNetwork`
-from `manifests/deployment.yaml` and delete the `enable_policy_exemption_deny_priv_esc`
-policy exemption.
+**Status**: AGC configs remain codified for Microsoft Support escalation. **NGINX Ingress
+is deployed as the WORKING alternative** (see section below).
 
 **Evidence**: See `.squad/decisions/inbox/drake-agc-rootcause.md` in `alz-avm-tf-demo/alz-prod`.
 
 ---
 
+## NGINX Ingress (Working Alternative - 2026-06-10)
+
+While AGC data-plane forwarding is blocked at the Azure product level, **NGINX Ingress
+is deployed as the working ingress** for the SRE store-app demo.
+
+### Deployment
+
+**Controller**: `manifests/nginx-controller.yaml`
+- Namespace: `ingress-nginx`
+- Image: `crsreagtdmoswc001.azurecr.io/ingress-nginx/controller:v1.11.1` (mirrored from `registry.k8s.io`)
+- Service: Internal Azure LoadBalancer (private-by-default)
+- LB IP: 10.16.0.198 (private, VNET-accessible only)
+
+**Ingress**: `manifests/nginx-ingress.yaml`
+- Routes HTTPS traffic (Host: `store-app.local`) to `store-app` Service on port 8080
+- Requires TLS secret `store-app-tls-placeholder` (created manually with self-signed cert for policy compliance)
+
+### Verification (2026-06-10)
+
+From node-subnet VM (vm-agc-apply2):
+```
+$ curl -k https://10.16.0.198/ -H "Host: store-app.local"
+HTTP/1.1 200 OK
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+```
+
+**HTTP 200 ACHIEVED** via NGINX ingress (internal access from VNET).
+
+### TLS Secret Creation (Manual)
+
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout tls.key -out tls.crt -subj '/CN=store-app.local/O=store-app'
+kubectl create secret tls store-app-tls-placeholder -n store-app --cert=tls.crt --key=tls.key
+```
+
+### ACR Image Import (Manual)
+
+```bash
+az acr import --name crsreagtdmoswc001 \
+  --source registry.k8s.io/ingress-nginx/controller:v1.11.1 \
+  --image ingress-nginx/controller:v1.11.1
+```
+
+### Notes
+
+- **Internal LB**: The NGINX controller Service uses an internal Azure LB (10.16.0.198)
+  per private-by-default directive. For internet-facing demos, change the Service annotation
+  to remove `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` and the LB
+  will get a public IP.
+- **Policy**: The ingress requires `force-ssl-redirect: "true"` annotation + TLS config
+  to satisfy the Azure Policy "Ingress should allow https only" (Gatekeeper webhook).
+- **hostNetwork**: The store-app deployment can remain with `hostNetwork: true` (current)
+  or revert to normal ClusterIP mode - NGINX works with both. hostNetwork was added for
+  AGC testing and is not required for NGINX.
+
+---
+
 ## Codify Completion Checklist
 
+### AGC Infrastructure (Codified for MS Support Escalation)
 - [x] ACR Private Endpoint (`dependencies.tf`)
 - [x] ACR PE DNS Zone Group (`dependencies.tf`)
 - [x] ALB Controller UAMI + FIC + roles (`alb-controller.tf`)
@@ -104,9 +161,18 @@ policy exemption.
 - [x] Policy Exemption: Deny-Priv-Esc-AKS (`policy-exemptions.tf`)
 - [x] ACR AcrPull role (kubelet identity) (`dependencies.tf`)
 - [x] Manifests (Gateway, HTTPRoute, Service, Deployment) (`manifests/`)
+
+### NGINX Ingress (Working Alternative)
+- [x] NGINX Controller manifest (`manifests/nginx-controller.yaml`)
+- [x] NGINX Ingress manifest (`manifests/nginx-ingress.yaml`)
+- [x] ACR image import (manual: `az acr import`)
+- [x] TLS secret creation (manual: `kubectl create secret tls`)
+- [x] HTTP 200 verified from VNET (2026-06-10)
+
+### External Infrastructure (Not in This Module)
 - [ ] DNS A records (external - platform team / manual)
 - [ ] AVNM egress rule (external - alz-prod governance baseline)
-- [ ] Helm release (applied separately - not in Terraform)
+- [ ] Helm release for ALB controller (applied separately - not in Terraform)
 - [ ] Manifest apply (applied separately - not in Terraform)
 
 ---
