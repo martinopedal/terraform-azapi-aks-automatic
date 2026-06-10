@@ -123,6 +123,89 @@ resource "azapi_resource" "apiserver_subnet" {
 
 
 # -----------------------------------------------------------------------------
+# Network Security Group for AGC Subnet
+#
+# AGC requires specific NSG rules for ingress traffic and backend connectivity.
+# In ALZ Corp vending mode, these rules are added to the pre-provisioned shared
+# NSG by the platform team. In standalone mode, we create a dedicated NSG here.
+#
+# Required rules (validated 2026-06-10):
+#   - AllowInternetToAgc: Inbound 80,443 from Internet -> snet-agc
+#   - AllowLbToAgc: Inbound * from AzureLoadBalancer -> snet-agc
+#   - AllowAgcToBackends: Inbound * from snet-agc (10.16.1.0/24) -> Any
+#   - AllowVnetInbound: Inbound * from VirtualNetwork -> VirtualNetwork
+#     (restores default intra-VNet connectivity if a DenyAllInbound rule exists)
+# -----------------------------------------------------------------------------
+
+resource "azapi_resource" "nsg_agc" {
+  count     = local.create_agc_subnet ? 1 : 0
+  type      = "Microsoft.Network/networkSecurityGroups@2024-05-01"
+  name      = "nsg-${var.cluster_name}-agc"
+  location  = local.rg_location
+  parent_id = local.rg_id
+  tags      = local.tags
+
+  body = {
+    properties = {
+      securityRules = [
+        {
+          name = "AllowInternetToAgc"
+          properties = {
+            protocol                 = "Tcp"
+            sourcePortRange          = "*"
+            destinationPortRanges    = ["80", "443"]
+            sourceAddressPrefix      = "Internet"
+            destinationAddressPrefix = var.agc_subnet_address_prefix
+            access                   = "Allow"
+            priority                 = 300
+            direction                = "Inbound"
+          }
+        },
+        {
+          name = "AllowLbToAgc"
+          properties = {
+            protocol                 = "*"
+            sourcePortRange          = "*"
+            destinationPortRange     = "*"
+            sourceAddressPrefix      = "AzureLoadBalancer"
+            destinationAddressPrefix = var.agc_subnet_address_prefix
+            access                   = "Allow"
+            priority                 = 310
+            direction                = "Inbound"
+          }
+        },
+        {
+          name = "AllowAgcToBackends"
+          properties = {
+            protocol                 = "*"
+            sourcePortRange          = "*"
+            destinationPortRange     = "*"
+            sourceAddressPrefix      = var.agc_subnet_address_prefix
+            destinationAddressPrefix = "*"
+            access                   = "Allow"
+            priority                 = 320
+            direction                = "Inbound"
+          }
+        },
+        {
+          name = "AllowVnetInbound"
+          properties = {
+            protocol                 = "*"
+            sourcePortRange          = "*"
+            destinationPortRange     = "*"
+            sourceAddressPrefix      = "VirtualNetwork"
+            destinationAddressPrefix = "VirtualNetwork"
+            access                   = "Allow"
+            priority                 = 400
+            direction                = "Inbound"
+          }
+        }
+      ]
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Application Gateway for Containers Subnet
 #
 # Dedicated /24 subnet delegated to Microsoft.ServiceNetworking/trafficControllers.
@@ -139,6 +222,10 @@ resource "azapi_resource" "agc_subnet" {
     properties = {
       addressPrefix = var.agc_subnet_address_prefix
 
+      networkSecurityGroup = {
+        id = azapi_resource.nsg_agc[0].id
+      }
+
       delegations = [
         {
           name = "agc-delegation"
@@ -151,7 +238,7 @@ resource "azapi_resource" "agc_subnet" {
   }
 
   # Subnets in the same VNet must be created sequentially.
-  depends_on = [azapi_resource.apiserver_subnet]
+  depends_on = [azapi_resource.apiserver_subnet, azapi_resource.nsg_agc]
 }
 
 # =============================================================================

@@ -836,3 +836,21 @@ variable "enable_policy_exemption_mcsb_k8s" {
   type        = bool
   default     = false
 }
+
+variable "enable_policy_exemption_deny_priv_esc" {
+  description = <<-EOT
+    Enable policy exemption for Deny-Priv-Esc-AKS on the resource group. This policy blocks
+    pods with hostNetwork: true, privileged: true, or allowPrivilegeEscalation: true.
+    
+    The SRE Agent demo requires hostNetwork: true as a workaround for an AGC data-plane
+    forwarding bug (BYO mode + Gateway API v1 + AKS Automatic + ALB controller 1.10.28)
+    where AGC cannot forward client HTTP traffic to Azure CNI Overlay pod IPs, despite
+    health probes working. hostNetwork runs pods on node IPs, which are VNET-routable.
+    
+    This exemption is demo-scoped (enforced to rg-sreagt-dmo-swc-001 in the resource lifecycle)
+    and expires in 30 days. Once Microsoft fixes the AGC bug, remove hostNetwork from the
+    deployment and delete this exemption.
+  EOT
+  type        = bool
+  default     = false
+}

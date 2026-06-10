@@ -70,3 +70,68 @@ resource "azapi_resource" "policy_exemption_mcsb_k8s" {
     }
   }
 }
+
+# -----------------------------------------------------------------------------
+# Policy Exemption: Deny-Priv-Esc-AKS (hostNetwork Workaround)
+#
+# The store-app deployment uses hostNetwork: true as a workaround for an AGC
+# data-plane forwarding bug (BYO mode + Gateway API v1 + AKS Automatic + ALB
+# controller 1.10.28). AGC cannot forward client HTTP traffic to Azure CNI
+# Overlay pod IPs (10.244.x), even though health probes work. hostNetwork runs
+# pods on node IPs (10.16.0.x), which are VNET-routable and work as backends.
+#
+# The Deny-Priv-Esc-AKS policy (Deny-PolicyPck-DINE assignment at alz MG)
+# blocks pods with hostNetwork, privileged, or allowPrivilegeEscalation: true.
+# This exemption permits the hostNetwork workaround for the SRE Agent demo only.
+#
+# Once Microsoft fixes the AGC forwarding bug, remove hostNetwork from the
+# deployment and delete this exemption.
+# -----------------------------------------------------------------------------
+
+resource "azapi_resource" "policy_exemption_deny_priv_esc" {
+  count     = var.enable_policy_exemption_deny_priv_esc ? 1 : 0
+  type      = "Microsoft.Authorization/policyExemptions@2022-07-01-preview"
+  name      = "exempt-denyprivesc-sreagt-store-demo"
+  parent_id = local.rg_id
+
+  body = {
+    properties = {
+      policyAssignmentId = "/providers/Microsoft.Management/managementGroups/alz/providers/Microsoft.Authorization/policyAssignments/Deny-PolicyPck-DINE"
+      exemptionCategory  = "Waiver"
+      displayName        = "Deny-Priv-Esc-AKS - SRE Agent Demo hostNetwork Workaround"
+      description        = <<-EOT
+        Exempts the SRE Agent store-app demo from the Deny-Priv-Esc-AKS policy
+        which blocks pods with hostNetwork: true. The hostNetwork setting is a
+        required workaround for an AGC data-plane forwarding bug where AGC
+        cannot forward client HTTP traffic to Azure CNI Overlay pod IPs,
+        despite health probes working correctly.
+        
+        This exemption is scoped to this demo resource group only and expires
+        in 30 days. Once Microsoft resolves the AGC bug, the deployment will
+        be updated to remove hostNetwork and this exemption will be deleted.
+        
+        Related: github.com/Azure/application-gateway-kubernetes-ingress/issues
+        Policy: Deny-Priv-Esc-AKS (def c26596ff-4d70-4e6a-9a30-c2506bd2f80c)
+      EOT
+      expiresOn          = timeadd(timestamp(), "720h") # 30 days from apply
+
+      policyDefinitionReferenceIds = [
+        "denyprivescaks"
+      ]
+
+      metadata = {
+        createdBy   = "Terraform"
+        requestedBy = "Martin Opedal (@martinopedal)"
+        reason      = "AGC data-plane bug workaround - hostNetwork required for VNET-routable backend IPs"
+        jira        = "N/A"
+      }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.resource_group_name == "rg-sreagt-dmo-swc-001"
+      error_message = "This policy exemption is demo-scoped and must only be applied to rg-sreagt-dmo-swc-001. For other resource groups, create a separate exemption resource."
+    }
+  }
+}

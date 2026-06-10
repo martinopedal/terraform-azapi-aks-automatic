@@ -3,10 +3,18 @@ kind: HTTPRoute
 metadata:
   name: store-app-route
   namespace: store-app
+  annotations:
+    # KNOWN ISSUE (2026-06-10): AGC data-plane forwarding bug prevents client
+    # HTTP traffic from reaching backends (BYO mode + Gateway API v1 + AKS
+    # Automatic + ALB controller 1.10.28). HTTPRoute shows Programmed=True, but
+    # internet clients get "Empty reply from server". Health probes work, direct
+    # backend access works, both frontends fail identically. Root cause is an
+    # AGC product defect, not configuration. Escalate to Microsoft Support P2.
+    # Fallback: switch demo to NGINX or Istio ingress.
+    alz-prod.issues/agc-forwarding-bug: "https://github.com/Azure/application-gateway-kubernetes-ingress/issues"
 spec:
   parentRefs:
     - name: store-app-gateway
-      sectionName: http
   rules:
     - matches:
         - path:
@@ -14,4 +22,4 @@ spec:
             value: /
       backendRefs:
         - name: store-app
-          port: 80
+          port: 8080
