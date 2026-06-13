@@ -1,4 +1,32 @@
-# AGC Data-Plane Forwarding Bug - Microsoft Support Report
+# AGC Client Traffic Not Forwarded - RESOLVED: unsupported install model on AKS Automatic
+
+> **RESOLUTION (2026-06-14):** This is **NOT an AGC product defect.** Root cause: the ALB Controller
+> was **self-installed via Helm** on an **AKS Automatic** cluster. AKS Automatic requires the
+> **managed Gateway API + ALB Controller add-on**; a Helm-installed controller reconciles the
+> control plane (Gateway/HTTPRoute `Programmed=True`, health probes 200) but the managed data-plane
+> integration that AKS Automatic provides is absent, so client traffic is never forwarded. Do NOT
+> file a product P2.
+>
+> **Fix** (all prerequisites verified present on `aks-sreagt-store-dmo-swc-001`: workload identity
+> enabled, `ManagedGatewayAPIPreview` + `ApplicationLoadBalancerPreview` Registered, K8s 1.34.8,
+> Azure CNI Overlay):
+> 1. Remove the self-installed Helm controller (`azure-alb-system`) and its self-installed Gateway
+>    API + ALB CRDs (delete the Gateway/HTTPRoute CRs first so finalizers clear).
+> 2. `az aks update -g rg-sreagt-dmo-swc-001 -n aks-sreagt-store-dmo-swc-001 --enable-gateway-api --enable-application-load-balancer`
+> 3. Re-apply the Gateway + HTTPRoute. The managed add-on installs `alb-controller` in `kube-system`
+>    and a Valid `azure-alb-external` GatewayClass. For a managed AGC, drop the BYO `alb-id`
+>    annotation and let the add-on provision one; for BYO, grant the add-on managed identity
+>    `applicationloadbalancer-<cluster>` the `AppGw for Containers Configuration Manager` role on the
+>    existing AGC.
+> 4. Validate: `curl http://<frontend-fqdn>/` returns HTTP 200. nginx is then no longer needed.
+>
+> Reference: Microsoft Learn, "Deploy Application Gateway for Containers ALB Controller - AKS Add-on"
+> (add-on deployment is required when using AKS Automatic clusters). The investigation below is
+> retained for the record; its original "product defect" conclusion is superseded by this resolution.
+
+---
+
+# Original investigation (2026-06-10) - Microsoft Support Report (superseded)
 
 **Date**: 2026-06-10  
 **Severity**: P2  
@@ -245,6 +273,15 @@ This is a **fundamental AGC data-plane forwarding defect**, likely specific to:
 - Gateway API v1 (networking.k8s.io/v1)
 - AKS Automatic cluster
 - ALB controller version 1.10.28
+
+**UPDATE (2026-06-14): the above conclusion is WRONG. See the RESOLUTION at the top of this file.**
+This is not a product defect. The asymmetry (AGC health probes reach the backend and get 200, but
+client requests are never forwarded) is explained by the **unsupported install model**: a
+self-installed Helm ALB Controller on AKS Automatic. AKS Automatic requires the managed Gateway API
++ ALB Controller add-on. The control plane reconciled (`Programmed=True`) but the managed data-plane
+integration was absent. The five-backend matrix failing identically is consistent with this: the
+backend type is irrelevant when the controller install model is unsupported. Fix: enable the
+managed add-on (`az aks update --enable-gateway-api --enable-application-load-balancer`).
 
 ---
 
