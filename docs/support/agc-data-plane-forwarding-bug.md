@@ -1,28 +1,33 @@
-# AGC Client Traffic Not Forwarded - RESOLVED: unsupported install model on AKS Automatic
+# AGC Client Traffic Not Forwarded - two issues, live-validated 2026-06-14
 
-> **RESOLUTION (2026-06-14):** This is **NOT an AGC product defect.** Root cause: the ALB Controller
-> was **self-installed via Helm** on an **AKS Automatic** cluster. AKS Automatic requires the
-> **managed Gateway API + ALB Controller add-on**; a Helm-installed controller reconciles the
-> control plane (Gateway/HTTPRoute `Programmed=True`, health probes 200) but the managed data-plane
-> integration that AKS Automatic provides is absent, so client traffic is never forwarded. Do NOT
-> file a product P2.
+> **RESOLUTION (2026-06-14, live-validated). Two SEPARATE issues - do not conflate them.**
 >
-> **Fix** (all prerequisites verified present on `aks-sreagt-store-dmo-swc-001`: workload identity
-> enabled, `ManagedGatewayAPIPreview` + `ApplicationLoadBalancerPreview` Registered, K8s 1.34.8,
-> Azure CNI Overlay):
-> 1. Remove the self-installed Helm controller (`azure-alb-system`) and its self-installed Gateway
->    API + ALB CRDs (delete the Gateway/HTTPRoute CRs first so finalizers clear).
-> 2. `az aks update -g rg-sreagt-dmo-swc-001 -n aks-sreagt-store-dmo-swc-001 --enable-gateway-api --enable-application-load-balancer`
-> 3. Re-apply the Gateway + HTTPRoute. The managed add-on installs `alb-controller` in `kube-system`
->    and a Valid `azure-alb-external` GatewayClass. For a managed AGC, drop the BYO `alb-id`
->    annotation and let the add-on provision one; for BYO, grant the add-on managed identity
->    `applicationloadbalancer-<cluster>` the `AppGw for Containers Configuration Manager` role on the
->    existing AGC.
-> 4. Validate: `curl http://<frontend-fqdn>/` returns HTTP 200. nginx is then no longer needed.
+> **(1) Unsupported install model - FIXED.** The ALB Controller was self-installed via Helm on an
+> AKS Automatic cluster, which requires the managed Gateway API + ALB Controller add-on. Corrected:
+> the managed add-on is now enabled (`az aks update --enable-gateway-api
+> --enable-application-load-balancer`; the managed controller runs in `kube-system`, GatewayClass
+> `azure-alb-external` is Valid, the HTTPRoute resolves to the backend on the Service port - note
+> the backend ref must use the Service port 80, not the targetPort 8080).
 >
-> Reference: Microsoft Learn, "Deploy Application Gateway for Containers ALB Controller - AKS Add-on"
-> (add-on deployment is required when using AKS Automatic clusters). The investigation below is
-> retained for the record; its original "product defect" conclusion is superseded by this resolution.
+> **(2) Client traffic not forwarded - NOT caused by (1), and it PERSISTS under the managed add-on.**
+> Live-validated: with the managed controller correctly programmed (backend attached,
+> `Programmed=True`, health probes 200), a clean public internet client (a throwaway ACI with no
+> corporate filter and no force-tunnel) STILL gets no response (HTTP 000 / empty reply) from the AGC
+> frontend. So it is neither the install model nor a test-client artifact.
+>
+> **Root cause of (2):** AGC has a **public frontend only** - there is no private/internal frontend
+> yet (Microsoft Learn "components"; Azure/AKS#5739 - private frontend is on the roadmap, not GA).
+> This cluster sits in a **private-by-default, force-tunneled ALZ that intentionally blocks public
+> ingress** (the same reason the public LoadBalancer path is blocked here - see the runbook). AGC's
+> public frontend hits that wall, so no client can reach the backend through it.
+>
+> **Conclusion:** AGC cannot provide working ingress in THIS private-by-default ALZ today, because
+> its only frontend option is public and the ALZ blocks public ingress. The internal NGINX
+> LoadBalancer (in-VNet, 10.16.0.199) remains the architecturally-correct ingress for this posture.
+> "Replace nginx with AGC" becomes possible when AGC private/internal frontend reaches GA, or if
+> public ingress is deliberately opened in the ALZ (which violates the private-by-default design).
+> This is a frontend-type limitation intersecting the ALZ posture, not an AGC data-plane bug to
+> escalate as a P2.
 
 ---
 
