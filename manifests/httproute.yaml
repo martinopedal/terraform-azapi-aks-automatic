@@ -3,10 +3,17 @@ kind: HTTPRoute
 metadata:
   name: store-app-route
   namespace: store-app
+  annotations:
+    # ROOT CAUSE (2026-06-14): client HTTP traffic was not forwarded because the ALB Controller was
+    # self-installed via Helm on an AKS Automatic cluster. AKS Automatic requires the MANAGED
+    # Gateway API + ALB Controller add-on (az aks update --enable-gateway-api
+    # --enable-application-load-balancer). The control plane reconciles (Programmed=True, health
+    # probes 200) but the managed data-plane integration is absent with a self-installed controller.
+    # This is NOT an AGC product defect. See docs/support/agc-data-plane-forwarding-bug.md (RESOLUTION).
+    alz-prod.issues/agc-forwarding-rootcause: "self-installed Helm controller on AKS Automatic; use the managed add-on"
 spec:
   parentRefs:
     - name: store-app-gateway
-      sectionName: http
   rules:
     - matches:
         - path:
@@ -14,4 +21,4 @@ spec:
             value: /
       backendRefs:
         - name: store-app
-          port: 80
+          port: 8080

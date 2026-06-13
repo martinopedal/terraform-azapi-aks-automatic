@@ -44,6 +44,9 @@
 
 ### Additional Documentation
 - [Day-2 Operations](docs/day2-operations.md)
+- [Private API Server Access Constraint](docs/private-api-access.md) ⚠️ **Critical for CI/CD**
+- [ALB Controller Setup & Workload Identity Wiring](docs/alb-controller-setup.md)
+- [MCSB Container Image Policy Blocker & Exemption](docs/policy-mcsb-container-images.md)
 - [ArgoCD Bootstrap](docs/argocd/README.md)
 - [Regional Availability](docs/regional-availability.md)
 - [Networking: Cilium vs Cilium Enterprise](docs/networking-cilium.md)

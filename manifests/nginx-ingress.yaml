@@ -1,0 +1,42 @@
+# NGINX Ingress for store-app
+# Routes HTTPS traffic to store-app Service on port 8080
+# NOTE: Requires TLS secret store-app-tls-placeholder (create manually or via cert-manager)
+#       openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#         -keyout tls.key -out tls.crt -subj '/CN=store-app.local/O=store-app'
+#       kubectl create secret tls store-app-tls-placeholder -n store-app --cert=tls.crt --key=tls.key
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: store-app-ingress
+  namespace: store-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - store-app.local
+    secretName: store-app-tls-placeholder
+  rules:
+  - host: store-app.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: store-app
+            port:
+              number: 8080
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: store-app
+            port:
+              number: 8080
