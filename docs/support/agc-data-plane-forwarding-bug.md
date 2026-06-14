@@ -1,5 +1,18 @@
 # AGC Client Traffic Not Forwarded - two issues, live-validated 2026-06-14
 
+> **BOTTOM LINE (2026-06-14): AGC is not needed here.** The demo app is already published to the
+> internet via the hub firewall DNAT, codified in
+> `alz-firewall-ops/policy/fwp-hub-swedencentral/rcg-baseline-dnat.tf`
+> (`9.223.67.160:80` -> store-app-lb `10.16.0.199:8080`, and `:443` -> nginx `10.16.0.198`).
+> Re-verified 2026-06-14: `http://9.223.67.160/` returns HTTP 200 from a clean internet client and
+> from a corporate laptop. The root cause of every public-ingress failure here (AGC and the public
+> nginx LB both connected TCP but returned nothing) is the cluster's
+> `outboundType=userDefinedRouting` force-tunnel, which breaks the asymmetric return path for public
+> inbound flows. The firewall DNAT makes the path symmetric (the firewall SNATs the DNAT traffic, so
+> the response returns through the firewall). That is the ALZ-canonical way to publish a
+> force-tunneled workload. Use it. AGC stays a non-forwarding dead end in this environment; the
+> detail below is retained for the record.
+
 > **FINAL UPDATE (2026-06-14, after a clean redeploy).** I deleted the BYO AGC and let the managed
 > add-on provision a brand-new managed AGC (`alb-7f3e77ae`) via an `ApplicationLoadBalancer` CR.
 > Result: Gateway/HTTPRoute `Programmed=True`, backend attached, controller config push
