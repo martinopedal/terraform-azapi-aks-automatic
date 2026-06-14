@@ -1,5 +1,19 @@
 # AGC Client Traffic Not Forwarded - two issues, live-validated 2026-06-14
 
+> **FINAL UPDATE (2026-06-14, after a clean redeploy).** I deleted the BYO AGC and let the managed
+> add-on provision a brand-new managed AGC (`alb-7f3e77ae`) via an `ApplicationLoadBalancer` CR.
+> Result: Gateway/HTTPRoute `Programmed=True`, backend attached, controller config push
+> `OPERATION_STATUS_SUCCESS`, health probes 200, and a client now TCP-connects to the new frontend.
+> But the HTTP request STILL never reaches the pod (pod logs show only AGC health probes from
+> 10.16.1.x). So the forwarding failure is NOT the install model, NOT stale config, NOT a
+> public-ingress block (TCP connects), and NOT NSG/AVNM/firewall/policy (all verified open and
+> allowing - including AVNM `allow-internet-to-nginx-ingress` 80/443 and `allow-agc-dataplane-egress`).
+> It is an **AGC data-plane forwarding failure at the platform level** in this ALZ; the original P2
+> forwarding concern was valid. **Action:** keep nginx-internal (10.16.0.199), or expose publicly via
+> Azure Front Door + Private Link to the internal LB; and open a Microsoft support case for the AGC
+> forwarding defect. The "two issues" framing below remains useful context (the managed add-on is
+> still the correct install model on AKS Automatic, and AGC is still public-frontend-only).
+
 > **RESOLUTION (2026-06-14, live-validated). Two SEPARATE issues - do not conflate them.**
 >
 > **(1) Unsupported install model - FIXED.** The ALB Controller was self-installed via Helm on an
