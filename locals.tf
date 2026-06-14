@@ -42,6 +42,8 @@ locals {
 
   agc_name = coalesce(var.app_gateway_for_containers_name, "${var.cluster_name}-agc")
 
+  alb_controller_identity_name = coalesce(var.alb_controller_identity_name, "uami-alb-${var.cluster_name}")
+
   # --- Ingress ---
   # WebAppRouting (managed NGINX) opt-in. Suppressed when AGC is enabled to avoid
   # dual-ingress conflicts. Standard SKU does not require it to be always-on.

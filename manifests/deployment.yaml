@@ -13,21 +13,25 @@ spec:
       labels:
         app: store-app
     spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        seccompProfile:
-          type: RuntimeDefault
+      # CRITICAL: hostNetwork: true bypasses Azure CNI Overlay pod IPs and runs
+      # pods on node IPs (10.16.0.x), which are VNET-routable for AGC backends.
+      # AGC ALB controller cannot forward data-plane traffic to overlay pod IPs
+      # (10.244.x) even though health probes work. This is a workaround for an
+      # AGC data-plane bug (BYO mode + Gateway API v1 + AKS Automatic).
+      hostNetwork: true
       containers:
         - name: nginx
+          # nginx-unprivileged runs as user 101 (nginx), not root.
+          # Standard nginx image requires root and will fail with runAsUser 101.
           image: crsreagtdmoswc001.azurecr.io/store-nginx:1.22
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 8080
+              protocol: TCP
           securityContext:
-            allowPrivilegeEscalation: false
+            runAsUser: 101
             runAsNonRoot: true
-            runAsUser: 1000
+            allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL

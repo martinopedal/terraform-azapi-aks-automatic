@@ -783,3 +783,74 @@ variable "acr_zone_redundancy_enabled" {
   type        = bool
   default     = true
 }
+
+# =============================================================================
+# ALB Ingress Controller (Helm-based with Workload Identity)
+# =============================================================================
+
+variable "enable_alb_helm_controller" {
+  description = <<-EOT
+    Enable the ALB Controller via Helm (oci://mcr.microsoft.com/application-lb/charts/alb-controller)
+    with a dedicated user-assigned managed identity and federated credential for workload identity.
+    
+    When true:
+      - Creates uami-alb-* managed identity
+      - Creates federated credential for azure-alb-system/alb-controller-sa ServiceAccount
+      - Assigns "AppGw for Containers Configuration Manager" role on the AGC Traffic Controller
+      - Assigns "Network Contributor" role on the AGC subnet
+    
+    This is the canonical approach for AGC + Workload Identity. The alternative is the
+    AKS-managed extension (azapi_resource.alb_controller_extension in agc.tf), which uses
+    a system-assigned identity automatically wired by the AKS RP. Both work; Helm gives
+    more control over version and configuration.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "alb_controller_identity_name" {
+  description = "Name of the user-assigned managed identity for the ALB Controller. Defaults to uami-alb-<cluster_name>."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.alb_controller_identity_name == null || can(regex("^[a-zA-Z0-9-_]{3,128}$", var.alb_controller_identity_name))
+    error_message = "alb_controller_identity_name must be 3-128 characters, alphanumeric, hyphens, and underscores only."
+  }
+}
+
+# =============================================================================
+# Policy Exemptions
+# =============================================================================
+
+variable "enable_policy_exemption_mcsb_k8s" {
+  description = <<-EOT
+    Enable policy exemption for Deploy-MCSB2-Monitoring (Microsoft Cloud Security Benchmark)
+    on the resource group. The MCSB initiative includes the "allowed container images" policy
+    with an empty regex ^(.+){0}$ that denies ALL images cluster-wide.
+    
+    This exemption is demo-scoped (enforced to rg-sreagt-dmo-swc-001 in the resource lifecycle)
+    and expires in 30 days. The estate-wide fix (correcting the regex at the alz management
+    group) is tracked in alz-avm-tf-demo/alz-prod governance baseline.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_policy_exemption_deny_priv_esc" {
+  description = <<-EOT
+    Enable policy exemption for Deny-Priv-Esc-AKS on the resource group. This policy blocks
+    pods with hostNetwork: true, privileged: true, or allowPrivilegeEscalation: true.
+    
+    The SRE Agent demo requires hostNetwork: true as a workaround for an AGC data-plane
+    forwarding bug (BYO mode + Gateway API v1 + AKS Automatic + ALB controller 1.10.28)
+    where AGC cannot forward client HTTP traffic to Azure CNI Overlay pod IPs, despite
+    health probes working. hostNetwork runs pods on node IPs, which are VNET-routable.
+    
+    This exemption is demo-scoped (enforced to rg-sreagt-dmo-swc-001 in the resource lifecycle)
+    and expires in 30 days. Once Microsoft fixes the AGC bug, remove hostNetwork from the
+    deployment and delete this exemption.
+  EOT
+  type        = bool
+  default     = false
+}
