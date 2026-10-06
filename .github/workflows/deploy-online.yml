@@ -177,12 +177,14 @@ jobs:
           done
           [ -n "$ADDRESS" ] || { echo "::error::Ingress has no public address"; exit 1; }
 
-          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://$ADDRESS/")
-          HTTPS_CODE=""
-          for i in $(seq 1 18); do
-            HTTPS_CODE=$(curl -sk -o /tmp/body.html -w '%{http_code}' "https://$ADDRESS/")
-            [ "$HTTPS_CODE" = "200" ] && break
-            echo "Waiting for HTTPS 200 ($i/18), got $HTTPS_CODE"; sleep 10
+          # A new load balancer rule can take a minute to answer; retry both
+          # checks with bounded timeouts instead of failing on the first try.
+          HTTP_CODE=""; HTTPS_CODE=""
+          for i in $(seq 1 30); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://$ADDRESS/" || true)
+            HTTPS_CODE=$(curl -sk -o /tmp/body.html -w '%{http_code}' --max-time 10 "https://$ADDRESS/" || true)
+            [ "$HTTP_CODE" = "308" ] && [ "$HTTPS_CODE" = "200" ] && break
+            echo "Waiting for ingress ($i/30): http=$HTTP_CODE https=$HTTPS_CODE"; sleep 10
           done
           EGRESS=$(terraform output -raw nat_gateway_public_ip 2>/dev/null || echo "n/a")
 
