@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: online-demo
+  namespace: online-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: online-demo
+  template:
+    metadata:
+      labels:
+        app: online-demo
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: aks-helloworld
+          # Public Microsoft sample image. No ACR/private registry needed for
+          # this Online-sub showcase, unlike the Corp store-app example.
+          image: mcr.microsoft.com/azuredocs/aks-helloworld:v1
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: TITLE
+              value: "AKS Automatic on the Online landing zone"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault

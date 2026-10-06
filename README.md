@@ -995,6 +995,7 @@ The azapi provider communicates directly with the Azure Resource Manager REST AP
 | App Routing + DNS | Managed ingress + DNS integration | `dns_zone_resource_ids` |
 | HTTP Proxy | Forced outbound proxy/TLS interception | `http_proxy_config` |
 | Defender | Runtime threat detection | `enable_defender`, `log_analytics_workspace_id` |
+| Online Landing Zone (simplified) | Internet-facing demo/showcase workload, no hub peering | `enable_byo_vnet = false`, `enable_managed_nginx = true`, `enable_private_cluster = false` |
 
 ### Scenario 1: External Subnets + UDR through Hub Firewall (Corp default)
 
@@ -1066,6 +1067,32 @@ http_proxy_config = {
 enable_defender            = true
 log_analytics_workspace_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace>"
 ```
+
+### Scenario 8: Online Landing Zone (simplified)
+
+A deliberately smaller topology for an internet-facing demo/showcase workload
+in an Online subscription, not Corp. There is no hub peering to route
+through, so the managed-VNet + managed NAT Gateway + managed NGINX
+combination removes the need for a route table, firewall, delegated AGC
+subnet, or private DNS zone, while keeping the same hardening defaults
+(Azure AD RBAC only, workload identity, OIDC issuer, `prevent_destroy`).
+AGC is intentionally not used here: it requires a delegated subnet that
+managed-VNet mode does not expose (see `AGENTS.md`).
+
+```hcl
+enable_byo_vnet                   = false
+enable_app_gateway_for_containers = false
+enable_managed_nginx              = true
+enable_private_cluster            = false
+```
+
+See `env/online.tfvars` for the full example, `manifests-online/` for a
+public-image demo webapp (standard `networking.k8s.io/v1 Ingress` on
+`ingressClassName: webapprouting.kubernetes.azure.com`), and
+`.github/workflows/deploy-online.yml` for the plan/apply/app pipeline
+(GitHub-hosted runner, since the API server is public; separate OIDC
+identity scoped only to the online resource group; gated by the `online`
+GitHub Environment's required reviewer).
 
 ### Connect to the Cluster
 

@@ -1,0 +1,208 @@
+name: "Deploy Online"
+
+# Simplified counterpart to deploy.yml for the Online landing zone
+# subscription (714ac8e0-8874-428d-a4f3-79bd3765bfed). Separate file so the
+# existing Corp/prod pipeline (deploy.yml, sub9, self-hosted runners) is
+# untouched. The Online cluster has a public API server, so a GitHub-hosted
+# runner can reach it directly, no self-hosted/private runner needed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply the saved plan after planning"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID_ONLINE }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID_ONLINE }}
+
+jobs:
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    environment: online
+    outputs:
+      plan_exit_code: ${{ steps.plan.outputs.exitcode }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_version: "~1.9"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_ONLINE }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_ONLINE }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TFSTATE_CONTAINER_NAME }}" \
+            -backend-config="key=aks-automatic-online.tfstate" \
+            -backend-config="subscription_id=${{ vars.TFSTATE_SUBSCRIPTION_ID }}" \
+            -backend-config="tenant_id=${{ vars.AZURE_TENANT_ID }}" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID_ONLINE }}" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -input=false -var-file="env/online.tfvars" -out=tfplan -detailed-exitcode
+        continue-on-error: true
+
+      - name: Fail on plan error
+        if: steps.plan.outputs.exitcode == '1'
+        run: |
+          echo "::error::Terraform plan failed with errors"
+          exit 1
+
+      - name: Upload Plan
+        if: steps.plan.outputs.exitcode == '2'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: tfplan-online
+          path: tfplan
+
+  apply:
+    name: Terraform Apply
+    needs: plan
+    if: inputs.apply && needs.plan.outputs.plan_exit_code == '2'
+    runs-on: ubuntu-latest
+    environment: online
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_version: "~1.9"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_ONLINE }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_ONLINE }}
+
+      - name: Download Plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: tfplan-online
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TFSTATE_CONTAINER_NAME }}" \
+            -backend-config="key=aks-automatic-online.tfstate" \
+            -backend-config="subscription_id=${{ vars.TFSTATE_SUBSCRIPTION_ID }}" \
+            -backend-config="tenant_id=${{ vars.AZURE_TENANT_ID }}" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID_ONLINE }}" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+  apply-online-app:
+    name: Apply Online Demo App Manifests
+    needs: apply
+    if: inputs.apply && needs.plan.outputs.plan_exit_code == '2'
+    runs-on: ubuntu-latest
+    environment: online
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_ONLINE }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_ONLINE }}
+
+      - name: Install kubectl and kubelogin
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+          kubectl version --client
+
+          if ! command -v kubelogin &> /dev/null; then
+            curl -LO "https://github.com/Azure/kubelogin/releases/download/v0.1.5/kubelogin-linux-amd64.zip"
+            unzip kubelogin-linux-amd64.zip
+            chmod +x bin/linux_amd64/kubelogin
+            sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+            rm -rf bin kubelogin-linux-amd64.zip
+          fi
+          kubelogin --version
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group rg-aks-online-demo \
+            --name aks-online-demo \
+            --overwrite-existing
+
+      - name: Convert kubeconfig to use kubelogin
+        run: |
+          kubelogin convert-kubeconfig -l azurecli
+
+      - name: Verify cluster connectivity
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Apply manifests
+        run: |
+          kubectl apply -k manifests-online/
+          echo "Manifests applied successfully"
+
+      - name: Wait for resources
+        run: |
+          echo "Waiting for deployment to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/online-demo -n online-demo || true
+
+          echo "Checking deployment status..."
+          kubectl get deployment,pod,service -n online-demo
+
+          echo "Checking Ingress status..."
+          kubectl get ingress -n online-demo
+          kubectl describe ingress online-demo -n online-demo || true
+
+      - name: Get Ingress address
+        run: |
+          echo "Waiting for the managed NGINX ingress to get a public address..."
+          for i in {1..30}; do
+            ADDRESS=$(kubectl get ingress online-demo -n online-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            if [ -n "$ADDRESS" ]; then
+              echo "Ingress address: $ADDRESS"
+              echo "Showcase URL: http://$ADDRESS/"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+
+          echo "Final Ingress status:"
+          kubectl get ingress online-demo -n online-demo -o yaml || true
