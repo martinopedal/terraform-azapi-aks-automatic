@@ -21,6 +21,14 @@
 module "aks" {
   source = "../.."
 
+  # The module derives count from whether these IDs are null, so they must
+  # be known at plan time. Pass deterministic IDs and order explicitly
+  # (module finding: prefer a boolean input over a null check on an ID).
+  depends_on = [
+    azapi_resource.snet_nodes,
+    azapi_resource.snet_apiserver,
+  ]
+
   location              = local.location
   resource_group_name   = "rg-aks-online-demo"
   create_resource_group = false
@@ -28,8 +36,8 @@ module "aks" {
   system_node_vm_size   = "Standard_D2s_v5"
 
   enable_byo_vnet              = true
-  external_node_subnet_id      = azapi_resource.snet_nodes.id
-  external_apiserver_subnet_id = azapi_resource.snet_apiserver.id
+  external_node_subnet_id      = local.node_subnet_id
+  external_apiserver_subnet_id = local.apiserver_subnet_id
   egress_type                  = "none"
 
   enable_app_gateway_for_containers = false
