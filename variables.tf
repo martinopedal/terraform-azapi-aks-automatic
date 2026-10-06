@@ -359,18 +359,21 @@ variable "egress_type" {
       - "none"                   : Cluster does not configure egress; relies on pre-existing UDR/NAT on the subnet.
                                    Required for AKS Automatic (sku=Automatic) with BYO VNet, because the AKS RP
                                    does not support userDefinedRouting with Node Auto-Provisioning.
+                                   Note: current AKS API versions treat "none" as a network-isolated cluster and
+                                   require bootstrapProfile.artifactSource = "Cache".
       - "userDefinedRouting"     : Routes 0.0.0.0/0 to the hub Azure Firewall via UDR. Standard/Base SKU only.
+      - "userAssignedNATGateway" : Uses a NAT Gateway the caller attached to the node subnet before cluster
+                                   creation. For Online/standalone spokes without a hub firewall; ALZ Corp should
+                                   keep centralised egress through the hub firewall.
       - "loadBalancer"           : Uses the AKS Standard Load Balancer for SNAT. Dev/test only.
     Ignored when using managed VNet (always managedNATGateway).
-    NAT Gateway is not offered as an option because ALZ Corp requires centralised
-    egress control through the hub firewall.
   EOT
   type        = string
   default     = "userDefinedRouting"
 
   validation {
-    condition     = contains(["none", "userDefinedRouting", "loadBalancer"], var.egress_type)
-    error_message = "egress_type must be one of: none, userDefinedRouting, loadBalancer."
+    condition     = contains(["none", "userDefinedRouting", "userAssignedNATGateway", "loadBalancer"], var.egress_type)
+    error_message = "egress_type must be one of: none, userDefinedRouting, userAssignedNATGateway, loadBalancer."
   }
 }
 

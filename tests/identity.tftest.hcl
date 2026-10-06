@@ -44,6 +44,20 @@ run "byo_vnet_public_cluster_uses_supplied_user_assigned_identity" {
   }
 }
 
+run "byo_vnet_accepts_user_assigned_nat_gateway_egress" {
+  command = plan
+
+  variables {
+    egress_type               = "userAssignedNATGateway"
+    user_assigned_identity_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-test"
+  }
+
+  assert {
+    condition     = azapi_resource.aks.body.properties.networkProfile.outboundType == "userAssignedNATGateway"
+    error_message = "egress_type = userAssignedNATGateway must pass through as outboundType for BYO subnets with a NAT Gateway."
+  }
+}
+
 run "no_identity_supplied_keeps_system_assigned" {
   command = plan
 

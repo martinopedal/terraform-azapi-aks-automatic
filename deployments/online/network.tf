@@ -6,7 +6,7 @@
 # subnets without NSGs and is rejected, so this root provisions the network
 # and the module consumes it through external_*_subnet_id, the same split
 # the Corp path uses. Egress is an explicit NAT Gateway on the node subnet;
-# the module sets egress_type = "none" so AKS uses the subnet's egress.
+# the module sets egress_type = "userAssignedNATGateway".
 # =============================================================================
 
 locals {
