@@ -1,0 +1,22 @@
+# Standard networking.k8s.io/v1 Ingress consumed by the AKS managed NGINX
+# "Application Routing" add-on (enable_managed_nginx = true). This replaces
+# the Gateway API gateway.yaml/httproute.yaml pair used by the Corp AGC
+# example; webAppRouting provisions its own public Standard Load Balancer
+# frontend, no AGC/ALB controller or delegated subnet required.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: online-demo
+  namespace: online-demo
+spec:
+  ingressClassName: webapprouting.kubernetes.azure.com
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: online-demo
+                port:
+                  number: 80
