@@ -6,17 +6,21 @@ name: "Deploy Online"
 # untouched. The Online cluster has a public API server, so the
 # apply-online-app job can use a GitHub-hosted runner to reach it directly.
 #
-# The plan/apply jobs use the shared "personal" self-hosted runner pool
-# (Azure Container Apps Job, labels self-hosted+personal-linux, see
-# rg-runners-shared-personal). This is a tenant-wide governance control
-# (SFI policy "Disable public network access on Storage accounts"), not a
-# soft preference: every storage account in this tenant gets its public
-# network access reset to Disabled by a management-group-scoped Modify
-# policy, so a GitHub-hosted runner can never reach any Terraform state
-# account here, regardless of RBAC. The Online demo's own state account
-# (stonlinedemotfst01, in rg-aks-online-demo) is reachable only via a
-# private endpoint inside vnet-personal-runners-swe, which is exactly the
-# VNet the personal runner pool already lives in.
+# The plan/apply jobs use a dedicated self-hosted runner (labels:
+# self-hosted, aks-online-demo) backed by a manually-triggered Azure
+# Container Apps Job (caj-online-demo-runner) in the same Container Apps
+# Environment/VNet as the shared personal runner pool
+# (rg-runners-shared-personal / vnet-personal-runners-swe). This is a
+# tenant-wide governance control (SFI policy "Disable public network
+# access on Storage accounts"), not a soft preference: every storage
+# account in this tenant gets its public network access reset to Disabled
+# by a management-group-scoped Modify policy, so a GitHub-hosted runner
+# can never reach any Terraform state account here, regardless of RBAC.
+# The Online demo's own state account (stonlinedemotfst01, in
+# rg-aks-online-demo) is reachable only via a private endpoint inside
+# vnet-personal-runners-swe, which is exactly the VNet this runner job
+# lives in. Start a job execution before dispatching this workflow:
+#   az containerapp job start -g rg-runners-shared-personal -n caj-online-demo-runner
 
 on:
   workflow_dispatch:
@@ -40,7 +44,7 @@ env:
 jobs:
   plan:
     name: Terraform Plan
-    runs-on: [self-hosted, personal-linux]
+    runs-on: [self-hosted, aks-online-demo]
     environment: online
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
@@ -95,7 +99,7 @@ jobs:
     name: Terraform Apply
     needs: plan
     if: inputs.apply && needs.plan.outputs.plan_exit_code == '2'
-    runs-on: [self-hosted, personal-linux]
+    runs-on: [self-hosted, aks-online-demo]
     environment: online
     steps:
       - name: Checkout
