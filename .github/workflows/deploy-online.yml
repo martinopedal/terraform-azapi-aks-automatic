@@ -3,8 +3,12 @@ name: "Deploy Online"
 # Simplified counterpart to deploy.yml for the Online landing zone
 # subscription (714ac8e0-8874-428d-a4f3-79bd3765bfed). Separate file so the
 # existing Corp/prod pipeline (deploy.yml, sub9, self-hosted runners) is
-# untouched. The Online cluster has a public API server, so a GitHub-hosted
-# runner can reach it directly, no self-hosted/private runner needed.
+# untouched. The Online cluster has a public API server, so the
+# apply-online-app job can use a GitHub-hosted runner to reach it directly.
+# The plan/apply jobs still need the private self-hosted runner pool: the
+# shared Terraform state storage account has public network access
+# disabled (AzureServices-bypass only), so a GitHub-hosted runner cannot
+# reach it regardless of RBAC.
 
 on:
   workflow_dispatch:
@@ -28,7 +32,7 @@ env:
 jobs:
   plan:
     name: Terraform Plan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, demo-private, sub9]
     environment: online
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
@@ -83,7 +87,7 @@ jobs:
     name: Terraform Apply
     needs: plan
     if: inputs.apply && needs.plan.outputs.plan_exit_code == '2'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, demo-private, sub9]
     environment: online
     steps:
       - name: Checkout
