@@ -1087,7 +1087,7 @@ module "aks" {
   enable_byo_vnet              = true
   external_node_subnet_id      = azapi_resource.snet_nodes.id     # NSG + NAT Gateway
   external_apiserver_subnet_id = azapi_resource.snet_apiserver.id # delegated /28 + NSG
-  egress_type                  = "none"                           # use the subnet's NAT Gateway
+  egress_type                  = "userAssignedNATGateway"         # NAT Gateway on the node subnet
 
   enable_managed_nginx              = true
   enable_app_gateway_for_containers = false

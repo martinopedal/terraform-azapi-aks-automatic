@@ -9,7 +9,8 @@
 # Internet-facing demo workload, not Corp:
 #   - BYO spoke from network.tf: NSG on every subnet (landing-zone policy),
 #     explicit NAT Gateway for egress, delegated API server subnet.
-#   - egress_type = "none": AKS uses the subnet's NAT Gateway for egress.
+#   - egress_type = "userAssignedNATGateway": egress through the NAT Gateway
+#     attached to the node subnet (static public IP).
 #   - enable_private_cluster = false: public API server (Entra RBAC only,
 #     local accounts disabled). No hub peering in an Online subscription.
 #   - enable_managed_nginx = true: AKS Application Routing add-on (managed
@@ -40,7 +41,7 @@ module "aks" {
   enable_byo_vnet              = true
   external_node_subnet_id      = local.node_subnet_id
   external_apiserver_subnet_id = local.apiserver_subnet_id
-  egress_type                  = "none"
+  egress_type                  = "userAssignedNATGateway"
   user_assigned_identity_id    = azapi_resource.uami_cluster.id
 
   enable_app_gateway_for_containers = false
