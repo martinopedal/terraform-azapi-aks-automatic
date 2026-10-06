@@ -76,4 +76,10 @@ run "cost_analysis_disabled_is_sent_explicitly_to_avoid_drift" {
     condition     = azapi_resource.aks.body.properties.metricsProfile.costAnalysis.enabled == false
     error_message = "metricsProfile.costAnalysis.enabled must be sent as false (the API's shape), not omitted, to avoid perpetual drift."
   }
+
+  # AKS returns serviceMeshProfile = { mode = "Disabled", istio = null }.
+  assert {
+    condition     = azapi_resource.aks.body.properties.serviceMeshProfile.mode == "Disabled"
+    error_message = "serviceMeshProfile.mode must be sent as Disabled when the mesh is off, to avoid perpetual drift."
+  }
 }

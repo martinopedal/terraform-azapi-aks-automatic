@@ -177,15 +177,19 @@ jobs:
           done
           [ -n "$ADDRESS" ] || { echo "::error::Ingress has no public address"; exit 1; }
 
-          # A new load balancer rule can take a minute to answer; retry both
-          # checks with bounded timeouts instead of failing on the first try.
-          HTTP_CODE=""; HTTPS_CODE=""
+          # A new load balancer rule can take a minute to answer; retry with
+          # bounded timeouts. The runner's NSG allows outbound 443 only, so
+          # the HTTP redirect is proven by the live Ingress configuration
+          # (force-ssl-redirect); the http:// code is reported for reference.
+          HTTPS_CODE=""
           for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://$ADDRESS/" || true)
             HTTPS_CODE=$(curl -sk -o /tmp/body.html -w '%{http_code}' --max-time 10 "https://$ADDRESS/" || true)
-            [ "$HTTP_CODE" = "308" ] && [ "$HTTPS_CODE" = "200" ] && break
-            echo "Waiting for ingress ($i/30): http=$HTTP_CODE https=$HTTPS_CODE"; sleep 10
+            [ "$HTTPS_CODE" = "200" ] && break
+            echo "Waiting for HTTPS 200 ($i/30), got $HTTPS_CODE"; sleep 10
           done
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$ADDRESS/" || true)
+          REDIRECT=$(kubectl get ingress online-demo -n online-demo -o jsonpath='{.metadata.annotations.nginx\.ingress\.kubernetes\.io/force-ssl-redirect}')
+          TLS=$(kubectl get ingress online-demo -n online-demo -o jsonpath='{.spec.tls}')
           EGRESS=$(terraform output -raw nat_gateway_public_ip 2>/dev/null || echo "n/a")
 
           {
@@ -193,11 +197,14 @@ jobs:
             echo "| Check | Result |"
             echo "| --- | --- |"
             echo "| Ingress public IP | \`$ADDRESS\` |"
-            echo "| \`http://\` response | $HTTP_CODE (expect 308 redirect to HTTPS) |"
             echo "| \`https://\` response | $HTTPS_CODE (expect 200) |"
             echo "| Page title | $(grep -o '<title>[^<]*' /tmp/body.html | sed 's/<title>//') |"
+            echo "| Ingress \`force-ssl-redirect\` | $REDIRECT (expect true) |"
+            echo "| Ingress TLS configured | $([ -n "$TLS" ] && echo yes || echo no) |"
+            echo "| \`http://\` from runner | $HTTP_CODE (runner egress is 443-only; 000 expected) |"
             echo "| Cluster egress (NAT Gateway) | \`$EGRESS\` |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-          [ "$HTTP_CODE" = "308" ] || { echo "::error::HTTP did not redirect to HTTPS"; exit 1; }
           [ "$HTTPS_CODE" = "200" ] || { echo "::error::HTTPS did not return 200"; exit 1; }
+          [ "$REDIRECT" = "true" ] || { echo "::error::Ingress does not force HTTPS"; exit 1; }
+          [ -n "$TLS" ] || { echo "::error::Ingress has no TLS section"; exit 1; }
