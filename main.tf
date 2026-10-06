@@ -43,7 +43,7 @@ resource "azapi_resource" "aks" {
 
   body = {
     sku = {
-      name = "Base"
+      name = "Automatic"
       tier = "Standard"
     }
 
