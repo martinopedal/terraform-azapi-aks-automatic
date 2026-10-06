@@ -5,8 +5,9 @@
 # Namespace objects. Creating the namespace through ARM keeps Kubernetes
 # rights least-privilege while the platform defines the namespace guardrails:
 #   - Pod Security Admission "restricted" enforced
-#   - default-deny ingress (manifests-online/networkpolicy.yaml allows only
-#     the App Routing NGINX controller)
+#   - default-deny ingress and egress (manifests-online/networkpolicy.yaml
+#     allows only the App Routing NGINX controller in; the app makes no
+#     outbound calls)
 #   - resource quota
 # =============================================================================
 
@@ -27,7 +28,7 @@ resource "azapi_resource" "ns_online_demo" {
       }
       defaultNetworkPolicy = {
         ingress = "DenyAll"
-        egress  = "AllowAll"
+        egress  = "DenyAll"
       }
       defaultResourceQuota = {
         cpuRequest    = "1000m"

@@ -24,9 +24,11 @@ module "aks" {
   # The module derives count from whether these IDs are null, so they must
   # be known at plan time. Pass deterministic IDs and order explicitly
   # (module finding: prefer a boolean input over a null check on an ID).
+  # The identity's subnet rights must exist before the cluster is created.
   depends_on = [
     azapi_resource.snet_nodes,
     azapi_resource.snet_apiserver,
+    azapi_resource.ra_cluster_subnet,
   ]
 
   location              = local.location
@@ -39,11 +41,16 @@ module "aks" {
   external_node_subnet_id      = local.node_subnet_id
   external_apiserver_subnet_id = local.apiserver_subnet_id
   egress_type                  = "none"
+  user_assigned_identity_id    = azapi_resource.uami_cluster.id
 
   enable_app_gateway_for_containers = false
   enable_managed_nginx              = true
 
+  # Public endpoint, but only reachable from the allow-listed egress IPs
+  # (the deployment runner's static NAT IP). Value comes from the GitHub
+  # environment, not from code.
   enable_private_cluster = false
+  authorized_ip_ranges   = var.api_server_authorized_ip_ranges
 
   create_acr      = false
   create_keyvault = false

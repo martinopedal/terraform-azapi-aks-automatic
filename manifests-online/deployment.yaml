@@ -34,7 +34,8 @@ spec:
           # Public Microsoft sample (ASP.NET Core 10 LTS, Ubuntu chiseled):
           # distroless, no shell, runs as the non-root "app" user (1654) and
           # listens on 8080, so no privileged port or capability is needed.
-          image: mcr.microsoft.com/dotnet/samples:aspnetapp-chiseled-10.0
+          # Pinned by digest (multi-arch index) for a reproducible deploy.
+          image: mcr.microsoft.com/dotnet/samples:aspnetapp-chiseled-10.0@sha256:9628a62d214f693b20697c010ba90288a7b2ba0961ece490526e7a51d5a83877
           ports:
             - name: http
               containerPort: 8080
@@ -60,9 +61,17 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false
+            readOnlyRootFilesystem: true
             runAsNonRoot: true
             capabilities:
               drop:
                 - ALL
             seccompProfile:
               type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

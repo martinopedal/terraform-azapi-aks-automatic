@@ -49,13 +49,10 @@ locals {
   dns_zone_ids           = local.enable_web_app_routing && length(var.dns_zone_resource_ids) > 0 ? var.dns_zone_resource_ids : null
 
   # --- Identity ---
-  # Custom private DNS zones require UserAssigned identity
-  use_user_assigned_identity = (
-    var.enable_private_cluster &&
-    var.private_dns_zone_id != null &&
-    var.private_dns_zone_id != "system" &&
-    var.private_dns_zone_id != "none"
-  )
+  # Use the supplied UserAssigned identity whenever one is given. AKS
+  # requires it for BYO VNets (OnlySupportedOnUserAssignedMSICluster) and
+  # for custom private DNS zones (enforced by a precondition in main.tf).
+  use_user_assigned_identity = var.user_assigned_identity_id != null
 
   # --- Tags ---
   tags = var.tags
