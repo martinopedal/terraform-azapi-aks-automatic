@@ -83,3 +83,14 @@ run "cost_analysis_disabled_is_sent_explicitly_to_avoid_drift" {
     error_message = "serviceMeshProfile.mode must be sent as Disabled when the mesh is off, to avoid perpetual drift."
   }
 }
+
+  # The module header promises AKS Automatic; the inherited source sent "Base"
+  # (AKS Standard). Read-back of the Online cluster showed sku Base/Standard.
+  run "cluster_uses_the_automatic_sku" {
+    command = plan
+
+    assert {
+      condition     = azapi_resource.aks.body.sku.name == "Automatic" && azapi_resource.aks.body.sku.tier == "Standard"
+      error_message = "AKS Automatic requires sku.name = Automatic and sku.tier = Standard."
+    }
+  }
