@@ -133,68 +133,58 @@ jobs:
 
       - name: Install kubectl and kubelogin
         run: |
-          if ! command -v kubectl &> /dev/null; then
-            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-            chmod +x kubectl
-            sudo mv kubectl /usr/local/bin/
-          fi
+          sudo az aks install-cli --only-show-errors
           kubectl version --client
-
-          if ! command -v kubelogin &> /dev/null; then
-            curl -LO "https://github.com/Azure/kubelogin/releases/download/v0.1.5/kubelogin-linux-amd64.zip"
-            unzip kubelogin-linux-amd64.zip
-            chmod +x bin/linux_amd64/kubelogin
-            sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
-            rm -rf bin kubelogin-linux-amd64.zip
-          fi
           kubelogin --version
 
-      - name: Get AKS credentials
+      - name: Get AKS credentials (Entra ID, no local accounts)
         run: |
           az aks get-credentials \
             --resource-group rg-aks-online-demo \
             --name aks-online-demo \
             --overwrite-existing
-
-      - name: Convert kubeconfig to use kubelogin
-        run: |
           kubelogin convert-kubeconfig -l azurecli
 
       - name: Verify cluster connectivity
         run: |
           kubectl cluster-info
-          kubectl get nodes
+          kubectl get nodes -o wide
 
       - name: Apply manifests
+        run: kubectl apply -k manifests-online/
+
+      - name: Wait for the app to be ready
         run: |
-          kubectl apply -k manifests-online/
-          echo "Manifests applied successfully"
+          kubectl rollout status deployment/online-demo -n online-demo --timeout=600s
+          kubectl get deployment,pod,service,ingress -n online-demo -o wide
 
-      - name: Wait for resources
+      - name: Prove the app is reachable over HTTPS only
         run: |
-          echo "Waiting for deployment to be ready..."
-          kubectl wait --for=condition=available --timeout=300s deployment/online-demo -n online-demo || true
+          ADDRESS=""
+          for i in $(seq 1 30); do
+            ADDRESS=$(kubectl get ingress online-demo -n online-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            [ -n "$ADDRESS" ] && break
+            echo "Waiting for ingress address ($i/30)"; sleep 10
+          done
+          [ -n "$ADDRESS" ] || { echo "::error::Ingress has no public address"; exit 1; }
 
-          echo "Checking deployment status..."
-          kubectl get deployment,pod,service -n online-demo
-
-          echo "Checking Ingress status..."
-          kubectl get ingress -n online-demo
-          kubectl describe ingress online-demo -n online-demo || true
-
-      - name: Get Ingress address
-        run: |
-          echo "Waiting for the managed NGINX ingress to get a public address..."
-          for i in {1..30}; do
-            ADDRESS=$(kubectl get ingress online-demo -n online-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-            if [ -n "$ADDRESS" ]; then
-              echo "Ingress address: $ADDRESS"
-              echo "Showcase URL: http://$ADDRESS/"
-              break
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 10
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://$ADDRESS/")
+          HTTPS_CODE=""
+          for i in $(seq 1 18); do
+            HTTPS_CODE=$(curl -sk -o /tmp/body.html -w '%{http_code}' "https://$ADDRESS/")
+            [ "$HTTPS_CODE" = "200" ] && break
+            echo "Waiting for HTTPS 200 ($i/18), got $HTTPS_CODE"; sleep 10
           done
 
-          echo "Final Ingress status:"
-          kubectl get ingress online-demo -n online-demo -o yaml || true
+          {
+            echo "### Online demo app"
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Ingress public IP | \`$ADDRESS\` |"
+            echo "| \`http://\` response | $HTTP_CODE (expect 308 redirect to HTTPS) |"
+            echo "| \`https://\` response | $HTTPS_CODE (expect 200) |"
+            echo "| Page title | $(grep -o '<title>[^<]*' /tmp/body.html | sed 's/<title>//') |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          [ "$HTTP_CODE" = "308" ] || { echo "::error::HTTP did not redirect to HTTPS"; exit 1; }
+          [ "$HTTPS_CODE" = "200" ] || { echo "::error::HTTPS did not return 200"; exit 1; }

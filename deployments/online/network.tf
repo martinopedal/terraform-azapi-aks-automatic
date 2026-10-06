@@ -1,0 +1,174 @@
+# =============================================================================
+# Online spoke network, owned by this root (vending pattern)
+#
+# The landing zone enforces "Subnets must have a Network Security Group"
+# (ALZ Deny-Subnet-Without-Nsg, Deny effect). An AKS-managed VNet creates
+# subnets without NSGs and is rejected, so this root provisions the network
+# and the module consumes it through external_*_subnet_id, the same split
+# the Corp path uses. Egress is an explicit NAT Gateway on the node subnet;
+# the module sets egress_type = "none" so AKS uses the subnet's egress.
+# =============================================================================
+
+locals {
+  location = "swedencentral"
+  rg_id    = "/subscriptions/${data.azapi_client_config.current.subscription_id}/resourceGroups/rg-aks-online-demo"
+  tags = {
+    Environment        = "Demo"
+    Owner              = "martin.opedal@microsoft.com"
+    DataClassification = "Internal"
+    Workload           = "AKS-Automatic-Online"
+    BusinessUnit       = "Azure-Specialist-Team"
+    lifecycle          = "demo"
+    purgeable          = "true"
+    expiry             = "2026-10-31"
+  }
+}
+
+data "azapi_client_config" "current" {}
+
+resource "azapi_resource" "pip_nat" {
+  type      = "Microsoft.Network/publicIPAddresses@2024-05-01"
+  name      = "pip-natgw-aks-online-demo"
+  location  = local.location
+  parent_id = local.rg_id
+  tags      = local.tags
+
+  response_export_values = ["properties.ipAddress"]
+
+  body = {
+    sku = { name = "Standard" }
+    properties = {
+      publicIPAllocationMethod = "Static"
+      publicIPAddressVersion   = "IPv4"
+    }
+  }
+}
+
+resource "azapi_resource" "natgw" {
+  type      = "Microsoft.Network/natGateways@2024-05-01"
+  name      = "natgw-aks-online-demo"
+  location  = local.location
+  parent_id = local.rg_id
+  tags      = local.tags
+
+  body = {
+    sku = { name = "Standard" }
+    properties = {
+      idleTimeoutInMinutes = 4
+      publicIpAddresses    = [{ id = azapi_resource.pip_nat.id }]
+    }
+  }
+}
+
+# Nodes: allow only HTTP/HTTPS from the internet to the ingress load
+# balancer. Management ports stay closed (ALZ Deny-MgmtPorts-Internet).
+resource "azapi_resource" "nsg_nodes" {
+  type      = "Microsoft.Network/networkSecurityGroups@2024-05-01"
+  name      = "nsg-aks-online-demo-nodes"
+  location  = local.location
+  parent_id = local.rg_id
+  tags      = local.tags
+
+  body = {
+    properties = {
+      securityRules = [
+        {
+          name = "Allow-Internet-HTTP-HTTPS-Inbound"
+          properties = {
+            priority                 = 100
+            direction                = "Inbound"
+            access                   = "Allow"
+            protocol                 = "Tcp"
+            sourceAddressPrefix      = "Internet"
+            sourcePortRange          = "*"
+            destinationAddressPrefix = "*"
+            destinationPortRanges    = ["80", "443"]
+          }
+        }
+      ]
+    }
+  }
+}
+
+# API server subnet: default rules only (VNet-internal traffic).
+resource "azapi_resource" "nsg_apiserver" {
+  type      = "Microsoft.Network/networkSecurityGroups@2024-05-01"
+  name      = "nsg-aks-online-demo-apiserver"
+  location  = local.location
+  parent_id = local.rg_id
+  tags      = local.tags
+
+  body = {
+    properties = {
+      securityRules = []
+    }
+  }
+}
+
+resource "azapi_resource" "vnet" {
+  type      = "Microsoft.Network/virtualNetworks@2024-05-01"
+  name      = "vnet-aks-online-demo"
+  location  = local.location
+  parent_id = local.rg_id
+  tags      = local.tags
+
+  body = {
+    properties = {
+      addressSpace = { addressPrefixes = ["10.20.0.0/16"] }
+    }
+  }
+}
+
+resource "azapi_resource" "snet_nodes" {
+  type      = "Microsoft.Network/virtualNetworks/subnets@2024-05-01"
+  name      = "snet-aks-nodes"
+  parent_id = azapi_resource.vnet.id
+
+  body = {
+    properties = {
+      addressPrefix        = "10.20.0.0/22"
+      networkSecurityGroup = { id = azapi_resource.nsg_nodes.id }
+      natGateway           = { id = azapi_resource.natgw.id }
+    }
+  }
+}
+
+# Delegated, dedicated /28 for API Server VNet Integration. No route table.
+resource "azapi_resource" "snet_apiserver" {
+  type      = "Microsoft.Network/virtualNetworks/subnets@2024-05-01"
+  name      = "snet-aks-apiserver"
+  parent_id = azapi_resource.vnet.id
+
+  body = {
+    properties = {
+      addressPrefix        = "10.20.4.0/28"
+      networkSecurityGroup = { id = azapi_resource.nsg_apiserver.id }
+      delegations = [
+        {
+          name       = "aks-apiserver"
+          properties = { serviceName = "Microsoft.ContainerService/managedClusters" }
+        }
+      ]
+    }
+  }
+
+  # Subnet writes on the same VNet must not run concurrently.
+  depends_on = [azapi_resource.snet_nodes]
+}
+
+# Network Contributor for the cluster identity on the VNet so Node
+# Auto-Provisioning can place nodes in the BYO subnet. The pipeline identity
+# may assign only this role (ABAC-constrained RBAC Administrator on the RG).
+resource "azapi_resource" "ra_cluster_network" {
+  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
+  name      = uuidv5("dns", "${azapi_resource.vnet.id}-aks-online-demo-net-contrib")
+  parent_id = azapi_resource.vnet.id
+
+  body = {
+    properties = {
+      roleDefinitionId = "/subscriptions/${data.azapi_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/4d97b98b-1d4f-4787-a291-c67834d212e7"
+      principalId      = module.aks.cluster_identity_principal_id
+      principalType    = "ServicePrincipal"
+    }
+  }
+}
