@@ -16,15 +16,18 @@ resource "azapi_resource" "rg" {
 }
 
 # =============================================================================
-# AKS Automatic Cluster
+# AKS cluster with AKS Automatic-style configuration
 #
-# Key differentiators from AKS Standard:
-#   - sku.name  = "Automatic"  (Standard uses "Base")
-#   - sku.tier  = "Standard"   (always Standard tier with uptime SLA)
-#   - nodeProvisioningProfile.mode = "Auto"  (Karpenter-based node autoprovisioning)
+# Known gap (see CHANGELOG): this body sends sku.name = "Base" (AKS Standard
+# SKU, Standard tier) with Automatic-style features: node auto-provisioning
+# (nodeProvisioningProfile.mode = "Auto"), Azure CNI Overlay + Cilium, Entra
+# RBAC only, workload identity, managed NGINX.
 #
-# Many features are preconfigured and cannot be changed (see README.md).
-# The configuration below shows every tuneable knob.
+# A true "Automatic" SKU is rejected for this shape: AKS requires Azure
+# Policy, the Key Vault secrets provider, ephemeral OS disks and disabled SSH
+# on the system pool (observed on an in-place update, Oct 6 2026). The
+# validated Automatic shape (hostedSystemProfile, no explicit system pool)
+# is in the session's Corp module.
 # =============================================================================
 
 resource "azapi_resource" "aks" {
@@ -43,7 +46,7 @@ resource "azapi_resource" "aks" {
 
   body = {
     sku = {
-      name = "Automatic"
+      name = "Base"
       tier = "Standard"
     }
 

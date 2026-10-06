@@ -84,13 +84,15 @@ run "cost_analysis_disabled_is_sent_explicitly_to_avoid_drift" {
   }
 }
 
-  # The module header promises AKS Automatic; the inherited source sent "Base"
-  # (AKS Standard). Read-back of the Online cluster showed sku Base/Standard.
-  run "cluster_uses_the_automatic_sku" {
-    command = plan
+# Guard for a documented gap (CHANGELOG): this body shape is AKS Standard
+# ("Base") with Automatic-style features. AKS rejects "Automatic" for it
+# (needs Azure Policy, Key Vault secrets provider, ephemeral OS disks and
+# disabled SSH on the system pool). Change only together with that redesign.
+run "sku_stays_base_until_automatic_redesign" {
+  command = plan
 
-    assert {
-      condition     = azapi_resource.aks.body.sku.name == "Automatic" && azapi_resource.aks.body.sku.tier == "Standard"
-      error_message = "AKS Automatic requires sku.name = Automatic and sku.tier = Standard."
-    }
+  assert {
+    condition     = azapi_resource.aks.body.sku.name == "Base" && azapi_resource.aks.body.sku.tier == "Standard"
+    error_message = "Do not switch to the Automatic SKU without the system-pool and add-on redesign; AKS rejects it for this body."
   }
+}
