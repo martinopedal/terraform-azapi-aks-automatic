@@ -17,3 +17,8 @@ output "egress_type" {
 output "oidc_issuer_url" {
   value = module.aks.oidc_issuer_url
 }
+
+output "nat_gateway_public_ip" {
+  description = "Stable egress IP for allow-listing downstream services."
+  value       = azapi_resource.pip_nat.output.properties.ipAddress
+}

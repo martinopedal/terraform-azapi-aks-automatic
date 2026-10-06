@@ -1,0 +1,22 @@
+# The managed namespace denies all ingress by default (deployments/online/
+# namespace.tf). Allow only the AKS App Routing NGINX controller to reach
+# the app on its container port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-app-routing
+  namespace: online-demo
+spec:
+  podSelector:
+    matchLabels:
+      app: online-demo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: app-routing-system
+      ports:
+        - protocol: TCP
+          port: 8080

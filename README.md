@@ -1070,46 +1070,62 @@ log_analytics_workspace_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers
 
 ### Scenario 8: Online Landing Zone (simplified)
 
-A deliberately smaller topology for an internet-facing demo/showcase workload
-in an Online subscription, not Corp. There is no hub peering to route
-through, so the managed-VNet + managed NAT Gateway + managed NGINX
-combination removes the need for a route table, firewall, delegated AGC
-subnet, or private DNS zone, while keeping the same hardening defaults
-(Azure AD RBAC only, workload identity, OIDC issuer, `prevent_destroy`).
-AGC is intentionally not used here: it requires a delegated subnet that
-managed-VNet mode does not expose (see `AGENTS.md`).
+A smaller topology for an internet-facing demo workload in an ALZ
+**Online** subscription, not Corp: no hub peering, a public API server
+(Entra RBAC only, local accounts disabled), and managed NGINX ingress.
+It is still deployed under the landing zone's real guardrails.
+
+`deployments/online/` is a thin root that consumes this module with
+`source = "../.."` and owns everything environment-specific: providers,
+backend, the spoke network, and the app namespace. The module stays
+provider-free and reusable.
 
 ```hcl
-enable_byo_vnet                   = false
-enable_app_gateway_for_containers = false
-enable_managed_nginx              = true
-enable_private_cluster            = false
+module "aks" {
+  source = "../.."
+
+  enable_byo_vnet              = true
+  external_node_subnet_id      = azapi_resource.snet_nodes.id     # NSG + NAT Gateway
+  external_apiserver_subnet_id = azapi_resource.snet_apiserver.id # delegated /28 + NSG
+  egress_type                  = "none"                           # use the subnet's NAT Gateway
+
+  enable_managed_nginx              = true
+  enable_app_gateway_for_containers = false
+  enable_private_cluster            = false
+}
 ```
 
-See `deployments/online/` for the full example: a thin root module that
-consumes this module with `source = "../.."`, and owns the providers and
-backend, so the module itself stays provider-free. Also see
-`manifests-online/` for a public-image demo webapp (standard
-`networking.k8s.io/v1 Ingress` on
-`ingressClassName: webapprouting.kubernetes.azure.com`), and
-`.github/workflows/deploy-online.yml` for the pipeline.
+Why BYO network and not an AKS-managed VNet: the landing zone denies
+subnets without an NSG (`Deny-Subnet-Without-Nsg`), and an AKS-managed VNet
+creates its subnets without one. The managed-VNet attempt was rejected by
+policy, so the root provisions NSG-protected subnets plus an explicit NAT
+Gateway, the same vending split the Corp path uses.
 
-How the pipeline deploys securely:
+How the pipeline (`.github/workflows/deploy-online.yml`) deploys securely:
 
-- **No stored Azure secrets.** GitHub OIDC with a separate identity that is
-  Contributor on the online resource group only.
+- **No stored Azure secrets.** GitHub OIDC, separate identity scoped to the
+  online resource group: Contributor, AKS RBAC Writer, and a
+  Role Based Access Control Administrator assignment that an ABAC condition
+  limits to granting Network Contributor to service principals.
 - **Human gate.** The `online` GitHub Environment requires a reviewer and
-  only accepts protected branches.
+  accepts protected branches only.
 - **Private state.** A tenant policy forces `publicNetworkAccess=Disabled`
-  on every storage account, so Terraform state is reachable only through a
-  private endpoint. Plan and apply therefore run on an ephemeral,
-  VNet-integrated self-hosted runner (Azure Container Apps Job, no managed
-  identity). Start one execution with `scripts/start-online-runner.ps1`
-  before dispatching the workflow.
+  on storage accounts, so state is reachable only through a private
+  endpoint. Plan and apply run on an ephemeral, VNet-integrated self-hosted
+  runner (Azure Container Apps Job, no managed identity). Start one
+  execution with `scripts/start-online-runner.ps1` before dispatching.
 - **No plan artifact.** The repo is public, so plan and apply run in one
   job instead of uploading `tfplan` as a downloadable artifact.
-- **App deploy** (`apply-online-app`) uses a GitHub-hosted runner because
-  the API server is public, with `kubelogin` and Entra RBAC.
+- **Least-privilege app deploy.** The namespace is an AKS managed namespace
+  created by Terraform through ARM (Pod Security `restricted`, default-deny
+  ingress, resource quota). The app job only needs namespace-level writes.
+- **Proof, not hope.** The app job fails unless HTTP redirects to HTTPS
+  (308) and HTTPS returns 200, and writes the result to the run summary.
+
+`manifests-online/` holds the app: a distroless, non-root ASP.NET Core
+sample from MCR on port 8080, a NetworkPolicy that admits only the App
+Routing NGINX controller, and an HTTPS-only Ingress (controller default
+certificate; use Key Vault for production).
 
 ### Connect to the Cluster
 
