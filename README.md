@@ -55,10 +55,12 @@
 
 This repository contains a Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resource creation. It is designed for deployment into an **Azure Landing Zone (ALZ) Corp** spoke subscription with private connectivity.
 
+> **Known gap (October 2026):** the cluster body sends `sku.name = "Base"`, so the deployed cluster is the AKS **Standard** SKU with Automatic-style features (node auto-provisioning, Azure CNI Overlay with Cilium, Entra RBAC only, workload identity, managed NGINX). AKS rejects an in-place switch to the `Automatic` SKU for this body shape. See [CHANGELOG.md](CHANGELOG.md).
+
 The module supports:
 
 - BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints). This module implements the node, API server, optional AGC, and private endpoint subnets in standalone mode, or consumes external subnet IDs in vending mode.
-- Two egress options: User-Defined Routing through hub firewall (Corp default) and Standard Load Balancer (dev/test only). Managed NAT Gateway available only with AKS-managed VNet.
+- Egress options: User-Defined Routing through hub firewall (Corp default), a caller-attached NAT Gateway (`userAssignedNATGateway`, for Online spokes), and Standard Load Balancer (dev/test only). Managed NAT Gateway is available only with an AKS-managed VNet.
 - Default ingress: Application Gateway for Containers managed add-on (public preview on AKS Automatic). Managed NGINX Application Routing is opt-in via `enable_managed_nginx` and disabled when AGC is enabled.
 - Private cluster with VNet-integrated API server
 - Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
@@ -1107,6 +1109,11 @@ How the pipeline (`.github/workflows/deploy-online.yml`) deploys securely:
   online resource group: Contributor, AKS RBAC Writer, and a
   Role Based Access Control Administrator assignment that an ABAC condition
   limits to granting Network Contributor to service principals.
+- **Least-privilege cluster identity.** A user-assigned identity created in
+  the root gets Network Contributor on the two AKS subnets only, before the
+  cluster exists.
+- **Locked API server.** The public endpoint accepts only the runner's
+  static egress IP (`authorized_ip_ranges` from the GitHub environment).
 - **Human gate.** The `online` GitHub Environment requires a reviewer and
   accepts protected branches only.
 - **Private state.** A tenant policy forces `publicNetworkAccess=Disabled`
@@ -1114,18 +1121,20 @@ How the pipeline (`.github/workflows/deploy-online.yml`) deploys securely:
   endpoint. Plan and apply run on an ephemeral, VNet-integrated self-hosted
   runner (Azure Container Apps Job, no managed identity). Start one
   execution with `scripts/start-online-runner.ps1` before dispatching.
-- **No plan artifact.** The repo is public, so plan and apply run in one
-  job instead of uploading `tfplan` as a downloadable artifact.
+- **One job, one approval.** Plan, apply, app deploy, and proof run in one
+  job; the repo is public, so `tfplan` is never uploaded as an artifact.
 - **Least-privilege app deploy.** The namespace is an AKS managed namespace
   created by Terraform through ARM (Pod Security `restricted`, default-deny
-  ingress, resource quota). The app job only needs namespace-level writes.
-- **Proof, not hope.** The app job fails unless HTTP redirects to HTTPS
-  (308) and HTTPS returns 200, and writes the result to the run summary.
+  ingress and egress, resource quota). The pipeline only needs
+  namespace-level writes; listing cluster nodes is forbidden by design.
+- **Proof, not hope.** The run fails unless HTTPS returns 200 and the live
+  Ingress forces HTTPS with TLS, and writes the result to the run summary.
 
 `manifests-online/` holds the app: a distroless, non-root ASP.NET Core
-sample from MCR on port 8080, a NetworkPolicy that admits only the App
-Routing NGINX controller, and an HTTPS-only Ingress (controller default
-certificate; use Key Vault for production).
+sample from MCR on port 8080, pinned by digest, with a read-only root
+filesystem; a NetworkPolicy that admits only the App Routing NGINX
+controller; and an HTTPS-only Ingress (controller default certificate; use
+Key Vault for production).
 
 ### Connect to the Cluster
 
