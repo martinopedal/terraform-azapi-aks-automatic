@@ -6,6 +6,7 @@
 - Added `tests/identity.tftest.hcl` (UserAssigned when supplied, SystemAssigned otherwise, `outboundType` pass-through for external subnets).
 - `egress_type` now accepts `userAssignedNATGateway` for BYO subnets with a caller-attached NAT Gateway (documented AKS Automatic custom-VNet option). With current AKS API versions, `none` means a network-isolated cluster and requires `bootstrapProfile.artifactSource = "Cache"`; the description now says so.
 - Fixed perpetual drift: `metricsProfile.costAnalysis.enabled` is now always sent. AKS returns `false` when disabled; sending `null` caused an in-place update on every apply (about 6 minutes each). Test added first.
+- Fixed perpetual drift: `serviceMeshProfile.mode` is now always sent (`Disabled` when the mesh is off), for the same reason. Test added first.
 - Added `deployments/online/`: a thin root that consumes the module for an ALZ Online subscription (BYO spoke with NSGs and NAT Gateway, user-assigned identity with subnet-scoped rights, API server authorized IPs, AKS managed namespace) and `.github/workflows/deploy-online.yml`.
 - Known limitation: `count` in `network.tf` is keyed on `external_node_subnet_id != null`, which is unknown when the caller creates the subnet in the same root. Pass plan-time-known IDs (see `deployments/online/`). A boolean input is the planned fix.
 

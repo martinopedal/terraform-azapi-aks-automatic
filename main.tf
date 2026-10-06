@@ -122,9 +122,11 @@ resource "azapi_resource" "aks" {
       }
 
       # ----- Ingress - Istio service mesh (optional) ----------------------------
-      serviceMeshProfile = var.enable_service_mesh ? {
-        mode = "Istio"
-        istio = {
+      # Always send mode; AKS returns { mode = "Disabled", istio = null } when
+      # the mesh is off, and sending null caused a perpetual in-place diff.
+      serviceMeshProfile = {
+        mode = var.enable_service_mesh ? "Istio" : "Disabled"
+        istio = var.enable_service_mesh ? {
           components = {
             ingressGateways = [
               {
@@ -133,8 +135,8 @@ resource "azapi_resource" "aks" {
               }
             ]
           }
-        }
-      } : null
+        } : null
+      }
 
       # ----- Security -----------------------------------------------------------
       # Image Cleaner defaults to a 7-day (168 hour) interval per AKS docs.
