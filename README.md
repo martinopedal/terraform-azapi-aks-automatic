@@ -1086,13 +1086,30 @@ enable_managed_nginx              = true
 enable_private_cluster            = false
 ```
 
-See `env/online.tfvars` for the full example, `manifests-online/` for a
-public-image demo webapp (standard `networking.k8s.io/v1 Ingress` on
+See `deployments/online/` for the full example: a thin root module that
+consumes this module with `source = "../.."`, and owns the providers and
+backend, so the module itself stays provider-free. Also see
+`manifests-online/` for a public-image demo webapp (standard
+`networking.k8s.io/v1 Ingress` on
 `ingressClassName: webapprouting.kubernetes.azure.com`), and
-`.github/workflows/deploy-online.yml` for the plan/apply/app pipeline
-(GitHub-hosted runner, since the API server is public; separate OIDC
-identity scoped only to the online resource group; gated by the `online`
-GitHub Environment's required reviewer).
+`.github/workflows/deploy-online.yml` for the pipeline.
+
+How the pipeline deploys securely:
+
+- **No stored Azure secrets.** GitHub OIDC with a separate identity that is
+  Contributor on the online resource group only.
+- **Human gate.** The `online` GitHub Environment requires a reviewer and
+  only accepts protected branches.
+- **Private state.** A tenant policy forces `publicNetworkAccess=Disabled`
+  on every storage account, so Terraform state is reachable only through a
+  private endpoint. Plan and apply therefore run on an ephemeral,
+  VNet-integrated self-hosted runner (Azure Container Apps Job, no managed
+  identity). Start one execution with `scripts/start-online-runner.ps1`
+  before dispatching the workflow.
+- **No plan artifact.** The repo is public, so plan and apply run in one
+  job instead of uploading `tfplan` as a downloadable artifact.
+- **App deploy** (`apply-online-app`) uses a GitHub-hosted runner because
+  the API server is public, with `kubelogin` and Entra RBAC.
 
 ### Connect to the Cluster
 
