@@ -1,28 +1,32 @@
 name: "Deploy Online"
 
-# Simplified counterpart to deploy.yml for the Online landing zone
-# subscription (vars.AZURE_SUBSCRIPTION_ID_ONLINE). Separate file so the
-# existing Corp/prod pipeline (deploy.yml) is untouched. The Online
-# cluster has a public API server, so apply-online-app can use a
-# GitHub-hosted runner to reach it directly.
+# Online landing zone deployment of the AKS Automatic module, plus a demo
+# app. Separate from the Corp pipeline (deploy.yml).
 #
-# Why plan/apply run on a self-hosted runner:
-# a tenant-wide Modify policy forces publicNetworkAccess=Disabled on every
-# storage account, so no GitHub-hosted runner can reach Terraform state.
-# The state account is reachable only through a private endpoint in the
-# runner VNet. The runner is an ephemeral, manually-started Azure
-# Container Apps Job (labels: self-hosted, aks-online-demo) with no
-# managed identity; Azure access comes only from OIDC, gated by the
-# `online` environment (required reviewer + protected branches only).
+# One job, one human approval:
+#   plan -> (apply) -> app deploy -> proof
 #
-# Before dispatching this workflow, start one runner execution:
+# Why a self-hosted runner:
+#   - A tenant-wide Modify policy forces publicNetworkAccess=Disabled on
+#     every storage account, so Terraform state is reachable only through a
+#     private endpoint in the runner VNet.
+#   - The cluster's public API server only accepts the runner's static NAT
+#     egress IP (TF_VAR_api_server_authorized_ip_ranges), so the app deploy
+#     must run here too.
+# The runner is an ephemeral, manually started Azure Container Apps Job
+# (labels: self-hosted, aks-online-demo) with no managed identity. Azure
+# access comes only from OIDC, gated by the `online` environment (required
+# reviewer, protected branches only). The repo is public, so the plan is
+# never uploaded as an artifact.
+#
+# Before dispatching, start one runner execution:
 #   scripts/start-online-runner.ps1
 
 on:
   workflow_dispatch:
     inputs:
       apply:
-        description: "Apply the saved plan after planning"
+        description: "Apply the plan, deploy the demo app, and prove it over HTTPS"
         required: true
         default: false
         type: boolean
@@ -31,17 +35,22 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: deploy-online
+  cancel-in-progress: false
+
 env:
   ARM_USE_OIDC: true
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID_ONLINE }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID_ONLINE }}
+  TF_VAR_api_server_authorized_ip_ranges: ${{ vars.AKS_AUTHORIZED_IP_RANGES_ONLINE }}
 
 jobs:
-  plan:
-    name: Terraform Plan and Apply
+  deploy:
+    name: Plan, apply, deploy app, prove
     runs-on: [self-hosted, aks-online-demo]
-    timeout-minutes: 45
+    timeout-minutes: 60
     environment: online
     defaults:
       run:
@@ -99,14 +108,16 @@ jobs:
           echo "exitcode=$ec" >> "$GITHUB_OUTPUT"
           [ "$ec" -eq 1 ] && exit 1 || exit 0
 
-      - name: Show plan summary
+      - name: Plan summary
         if: steps.plan.outputs.exitcode == '2'
-        run: terraform show -no-color tfplan | grep -E '^\s*# |^Plan:' | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          {
+            echo "### Terraform plan"
+            echo '```'
+            terraform show -no-color tfplan | grep -E '^\s*# |^Plan:'
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Apply in the same job: no plan artifact (artifacts are downloadable
-      # by anyone on a public repo and plans can hold sensitive values) and
-      # only one ephemeral runner execution needed. The `online` environment
-      # approval above gates both plan and apply.
       - name: Terraform Apply
         if: inputs.apply && steps.plan.outputs.exitcode == '2'
         run: terraform apply -input=false -auto-approve tfplan
@@ -114,51 +125,34 @@ jobs:
       - name: Remove local plan file
         if: always()
         run: rm -f tfplan
-  apply-online-app:
-    name: Apply Online Demo App Manifests
-    needs: plan
-    if: inputs.apply
-    runs-on: ubuntu-latest
-    environment: online
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-
-      - name: Azure Login (OIDC)
-        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_ONLINE }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_ONLINE }}
 
       - name: Install kubectl and kubelogin
+        if: inputs.apply
         run: |
-          sudo az aks install-cli --only-show-errors
+          az aks install-cli --only-show-errors
           kubectl version --client
           kubelogin --version
 
       - name: Get AKS credentials (Entra ID, no local accounts)
+        if: inputs.apply
         run: |
           az aks get-credentials \
             --resource-group rg-aks-online-demo \
             --name aks-online-demo \
             --overwrite-existing
           kubelogin convert-kubeconfig -l azurecli
-
-      - name: Verify cluster connectivity
-        run: |
-          kubectl cluster-info
           kubectl get nodes -o wide
 
-      - name: Apply manifests
-        run: kubectl apply -k manifests-online/
-
-      - name: Wait for the app to be ready
+      - name: Deploy the demo app
+        if: inputs.apply
+        working-directory: manifests-online
         run: |
+          kubectl apply -k .
           kubectl rollout status deployment/online-demo -n online-demo --timeout=600s
-          kubectl get deployment,pod,service,ingress -n online-demo -o wide
+          kubectl get deployment,pod,service,ingress,networkpolicy -n online-demo -o wide
 
       - name: Prove the app is reachable over HTTPS only
+        if: inputs.apply
         run: |
           ADDRESS=""
           for i in $(seq 1 30); do
@@ -175,6 +169,7 @@ jobs:
             [ "$HTTPS_CODE" = "200" ] && break
             echo "Waiting for HTTPS 200 ($i/18), got $HTTPS_CODE"; sleep 10
           done
+          EGRESS=$(terraform output -raw nat_gateway_public_ip 2>/dev/null || echo "n/a")
 
           {
             echo "### Online demo app"
@@ -184,6 +179,7 @@ jobs:
             echo "| \`http://\` response | $HTTP_CODE (expect 308 redirect to HTTPS) |"
             echo "| \`https://\` response | $HTTPS_CODE (expect 200) |"
             echo "| Page title | $(grep -o '<title>[^<]*' /tmp/body.html | sed 's/<title>//') |"
+            echo "| Cluster egress (NAT Gateway) | \`$EGRESS\` |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           [ "$HTTP_CODE" = "308" ] || { echo "::error::HTTP did not redirect to HTTPS"; exit 1; }

@@ -160,20 +160,3 @@ resource "azapi_resource" "snet_apiserver" {
   # Subnet writes on the same VNet must not run concurrently.
   depends_on = [azapi_resource.snet_nodes]
 }
-
-# Network Contributor for the cluster identity on the VNet so Node
-# Auto-Provisioning can place nodes in the BYO subnet. The pipeline identity
-# may assign only this role (ABAC-constrained RBAC Administrator on the RG).
-resource "azapi_resource" "ra_cluster_network" {
-  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
-  name      = uuidv5("dns", "${azapi_resource.vnet.id}-aks-online-demo-net-contrib")
-  parent_id = azapi_resource.vnet.id
-
-  body = {
-    properties = {
-      roleDefinitionId = "/subscriptions/${data.azapi_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/4d97b98b-1d4f-4787-a291-c67834d212e7"
-      principalId      = module.aks.cluster_identity_principal_id
-      principalType    = "ServicePrincipal"
-    }
-  }
-}

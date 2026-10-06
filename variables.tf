@@ -566,7 +566,7 @@ variable "private_dns_zone_id" {
 }
 
 variable "user_assigned_identity_id" {
-  description = "Resource ID of a pre-created UserAssigned managed identity. Required when private_dns_zone_id is a custom resource ID. The identity must have Private DNS Zone Contributor on the referenced zone."
+  description = "Resource ID of a pre-created UserAssigned managed identity for the cluster control plane. When set, the cluster uses it instead of a SystemAssigned identity. Required for BYO VNet subnets created outside the module (grant it Network Contributor on the VNet before cluster creation) and when private_dns_zone_id is a custom resource ID (grant it Private DNS Zone Contributor on the zone)."
   type        = string
   default     = null
 
