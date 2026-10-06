@@ -151,7 +151,10 @@ jobs:
             --name aks-online-demo \
             --overwrite-existing
           kubelogin convert-kubeconfig -l azurecli
-          kubectl get nodes -o wide
+          # Namespace-scoped check: the pipeline identity has AKS RBAC
+          # Writer and is intentionally not allowed to list cluster nodes.
+          kubectl auth can-i create deployments -n online-demo
+          kubectl get namespace online-demo --show-labels
 
       - name: Deploy the demo app
         if: inputs.apply
@@ -160,6 +163,8 @@ jobs:
           kubectl apply -k .
           kubectl rollout status deployment/online-demo -n online-demo --timeout=600s
           kubectl get deployment,pod,service,ingress,networkpolicy -n online-demo -o wide
+          echo "Least privilege check (expect 'no'):"
+          kubectl auth can-i list nodes || true
 
       - name: Prove the app is reachable over HTTPS only
         if: inputs.apply

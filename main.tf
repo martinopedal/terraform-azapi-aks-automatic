@@ -201,11 +201,13 @@ resource "azapi_resource" "aks" {
       } : null
 
       # ----- Cost analysis ------------------------------------------------------
-      metricsProfile = var.enable_cost_analysis ? {
+      # Always send the API's own shape. AKS returns enabled = false when
+      # disabled; sending null caused a perpetual in-place diff.
+      metricsProfile = {
         costAnalysis = {
-          enabled = true
+          enabled = var.enable_cost_analysis
         }
-      } : null
+      }
 
       # ----- HTTP proxy ---------------------------------------------------------
       # Configures proxy environment variables on all nodes and pods.
