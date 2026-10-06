@@ -66,3 +66,14 @@ run "no_identity_supplied_keeps_system_assigned" {
     error_message = "Without user_assigned_identity_id the cluster must keep a SystemAssigned identity."
   }
 }
+
+# AKS returns costAnalysis.enabled = false when disabled. Sending null made
+# every plan show an in-place update (observed: a 6-minute no-op apply).
+run "cost_analysis_disabled_is_sent_explicitly_to_avoid_drift" {
+  command = plan
+
+  assert {
+    condition     = azapi_resource.aks.body.properties.metricsProfile.costAnalysis.enabled == false
+    error_message = "metricsProfile.costAnalysis.enabled must be sent as false (the API's shape), not omitted, to avoid perpetual drift."
+  }
+}
