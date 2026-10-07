@@ -85,10 +85,11 @@ const TF_CHECKS = [
     id: "TF-10",
     name: "No provider blocks in child-module-ready code",
     check: (files) => {
-      // This is a root module, so providers are expected.
-      // Check that it's documented as root module.
-      const readme = files["README.md"] || "";
-      return readme.includes("root module");
+      const terraformFiles = Object.entries(files)
+        .filter(([path]) => path.endsWith(".tf"))
+        .map(([, content]) => content)
+        .join("\n");
+      return !/^\s*provider\s+"/m.test(terraformFiles);
     },
   },
   {

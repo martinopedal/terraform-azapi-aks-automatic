@@ -1,9 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-# The namespace itself is an AKS managed namespace created by Terraform
-# (deployments/online/namespace.tf), so it is not part of this kustomization.
-resources:
-  - networkpolicy.yaml
-  - deployment.yaml
-  - service.yaml
-  - ingress.yaml
