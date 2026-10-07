@@ -1,0 +1,16 @@
+# Trivy ignore file (YAML form supports path scoping and reasons).
+# Every entry needs a justification and the narrowest possible scope.
+misconfigurations:
+  - id: KSV-0109
+    statement: >-
+      ArgoCD argocd-cm uses $-variable syntax to reference secrets from
+      argocd-secret. The clientSecret field contains "$oidc.entra.clientSecret",
+      which is a pointer, not an actual credential.
+  - id: KSV-0125
+    paths:
+      - "manifests-online/deployment.yaml"
+    statement: >-
+      mcr.microsoft.com (Microsoft Container Registry) is not in Trivy's default
+      trusted-registry list. The Online demo intentionally uses a public,
+      Microsoft-published sample image, pinned by digest. Scoped to this file
+      only so other manifests still flag untrusted registries.
