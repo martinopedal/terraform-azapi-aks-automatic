@@ -219,3 +219,67 @@ resource "azapi_resource" "ra_reader" {
     }
   }
 }
+
+# =============================================================================
+# Prerequisite: PowerShell 7 (Copilot CLI requires PowerShell 6+; Windows 11
+# ships only Windows PowerShell 5.1). Pinned official MSI, verified by
+# SHA-256 and Authenticode signer before install. Idempotent; re-runs on
+# recreate-vm because it is replaced with the VM. Everything else (git,
+# Copilot CLI, Squad) is installed live in the demo.
+# =============================================================================
+
+locals {
+  pwsh_version = "7.6.6"
+  pwsh_msi_url = "https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/PowerShell-7.6.6-win-x64.msi"
+  pwsh_sha256  = "958838ff55091e1c8705d89efed0cc7e8245a3a6ef6c0ccfae20015227108ad8"
+}
+
+resource "azapi_resource" "install_pwsh" {
+  type      = "Microsoft.Compute/virtualMachines/runCommands@2024-11-01"
+  name      = "install-pwsh7"
+  location  = local.location
+  parent_id = azapi_resource.vm.id
+  tags      = local.tags
+
+  body = {
+    properties = {
+      asyncExecution                  = false
+      timeoutInSeconds                = 1200
+      treatFailureAsDeploymentFailure = true
+      source = {
+        script = <<-PS
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $exe = 'C:\Program Files\PowerShell\7\pwsh.exe'
+          if ((Test-Path $exe) -and ((& $exe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()') -eq '${local.pwsh_version}')) {
+            "PowerShell ${local.pwsh_version} already installed"
+          } else {
+            $msi = Join-Path $env:TEMP 'PowerShell-${local.pwsh_version}-win-x64.msi'
+            Invoke-WebRequest -Uri '${local.pwsh_msi_url}' -OutFile $msi -UseBasicParsing
+            $hash = (Get-FileHash $msi -Algorithm SHA256).Hash.ToLower()
+            if ($hash -ne '${local.pwsh_sha256}') { throw "SHA-256 mismatch: $hash" }
+            $sig = Get-AuthenticodeSignature $msi
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw "Signature check failed: $($sig.Status)" }
+            $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart ADD_PATH=1 REGISTER_MANIFEST=1 ENABLE_PSREMOTING=0" -Wait -PassThru
+            if ($p.ExitCode -notin 0, 3010) { throw "msiexec exit code $($p.ExitCode)" }
+            Remove-Item $msi -Force
+          }
+          "pwsh version: " + (& $exe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+        PS
+      }
+    }
+  }
+
+  # Policy-driven extension installs keep the VM busy after creation.
+  retry = {
+    error_message_regex  = ["AnotherOperationInProgress", "OperationNotAllowed", "Conflict", "is in progress", "RetryableError"]
+    interval_seconds     = 20
+    max_interval_seconds = 120
+  }
+
+  timeouts {
+    create = "30m"
+  }
+
+  depends_on = [azapi_resource.aad_login]
+}

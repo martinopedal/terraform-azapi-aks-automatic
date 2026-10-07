@@ -1,5 +1,13 @@
 name: "Apply Store App Manifests"
 
+# =============================================================================
+# RETIRED (October 2026): this workflow targets self-hosted runners labelled
+# [self-hosted, linux, demo-private, sub9] that do not exist, a private ACR
+# that does not exist, and a repo-root Terraform configuration without
+# provider blocks. It has never deployed successfully and is disabled in
+# GitHub Actions. The working, validated pattern is deploy-online.yml with a
+# thin root under deployments/ (see README Scenario 8). Kept for reference.
+# =============================================================================
 on:
   workflow_dispatch:
     inputs:

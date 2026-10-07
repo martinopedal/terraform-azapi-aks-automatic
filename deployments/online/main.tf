@@ -26,12 +26,12 @@
 module "aks" {
   source = "../.."
 
-  # The module derives count from whether these IDs are null, so the node
-  # and API server IDs are passed as plan-time-known strings. Ordering is
-  # implicit: the system subnet ID (created after the other two subnets) and
-  # the identity anchor (created after its VNet role assignment). No
-  # module-level depends_on: it would defer the module's data sources and
-  # force a cluster replacement whenever a dependency has a pending change.
+  # use_external_subnets = true keeps the module's count known at plan time
+  # while the subnets are created in this same root. Ordering is implicit
+  # through the references (subnets, then the identity anchor created after
+  # its VNet role assignment). No module-level depends_on: it would defer
+  # the module's data sources and force a cluster replacement whenever a
+  # dependency has a pending change.
 
   location              = local.location
   resource_group_name   = "rg-aks-online-demo"
@@ -40,8 +40,9 @@ module "aks" {
   cluster_sku           = "Automatic"
 
   enable_byo_vnet                = true
-  external_node_subnet_id        = local.node_subnet_id
-  external_apiserver_subnet_id   = local.apiserver_subnet_id
+  use_external_subnets           = true
+  external_node_subnet_id        = azapi_resource.snet_nodes.id
+  external_apiserver_subnet_id   = azapi_resource.snet_apiserver.id
   external_system_node_subnet_id = azapi_resource.snet_system.id
   egress_type                    = "userAssignedNATGateway"
   user_assigned_identity_id      = terraform_data.cluster_identity.output

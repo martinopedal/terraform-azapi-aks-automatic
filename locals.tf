@@ -4,7 +4,10 @@ locals {
   #   1. external_node_subnet_id = null  -> this module creates VNet + subnets (network.tf)
   #   2. external_node_subnet_id set     -> vending/AVNM pre-provisioned subnets (network.tf skipped)
   # Third path (enable_byo_vnet = false): AKS managed VNet (not suitable for ALZ Corp)
-  use_external_subnets = var.external_node_subnet_id != null
+  # var.use_external_subnets makes the choice explicit so count stays known at
+  # plan time even when the caller creates the subnets in the same root (the
+  # subnet IDs are then unknown until apply). When null, it is inferred.
+  use_external_subnets = var.use_external_subnets != null ? var.use_external_subnets : var.external_node_subnet_id != null
 
   create_network      = var.enable_byo_vnet && !local.use_external_subnets
   create_route_table  = local.create_network && var.egress_type == "userDefinedRouting"
