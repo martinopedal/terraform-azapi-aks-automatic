@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 (2026-10-06)
 
 - `user_assigned_identity_id` is now honored whenever it is set. Previously the cluster used a SystemAssigned identity unless the cluster was private with a custom private DNS zone, so a BYO-VNet cluster with caller-created subnets failed with `OnlySupportedOnUserAssignedMSICluster`. Consumers that do not pass the variable are unaffected. Consumers that passed it without a custom private DNS zone will now get a UserAssigned identity (identity change).
 - Added `tests/identity.tftest.hcl` (UserAssigned when supplied, SystemAssigned otherwise, `outboundType` pass-through for external subnets).
