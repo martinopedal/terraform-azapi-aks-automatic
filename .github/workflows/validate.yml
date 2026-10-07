@@ -34,6 +34,12 @@ jobs:
       - name: Terraform Test
         run: terraform test
 
+      - name: Validate Online root (deployments/online)
+        working-directory: deployments/online
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
   style:
     name: Style Check
     runs-on: ubuntu-latest
