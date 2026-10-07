@@ -96,12 +96,19 @@ jobs:
         id: plan
         run: |
           set +e
+          ARGS=()
           case "${{ inputs.action }}" in
-            destroy)     EXTRA="-destroy" ;;
-            recreate-vm) EXTRA="-replace=azapi_resource.vm" ;;
-            *)           EXTRA="" ;;
+            destroy) ARGS=(-destroy) ;;
+            recreate-vm)
+              # Replace the VM and everything Azure deletes with it (extension,
+              # auto-shutdown schedule, VM-scoped role assignments), so state
+              # and Azure never diverge. The NIC is detached and kept.
+              mapfile -t REPL < <(terraform state list | grep -E '^azapi_resource\.(vm|aad_login|auto_shutdown|ra_vm_admin_login)(\[|$)')
+              [ "${#REPL[@]}" -gt 0 ] || { echo "::error::No VM in state to recreate; run apply first"; exit 1; }
+              for r in "${REPL[@]}"; do ARGS+=("-replace=$r"); done
+              printf 'Replacing: %s\n' "${REPL[@]}" ;;
           esac
-          terraform plan -input=false -out=tfplan -detailed-exitcode $EXTRA
+          terraform plan -input=false -out=tfplan -detailed-exitcode "${ARGS[@]}"
           ec=$?
           echo "exitcode=$ec" >> "$GITHUB_OUTPUT"
           [ "$ec" -eq 1 ] && exit 1 || exit 0
@@ -154,3 +161,4 @@ jobs:
           [ -z "$PIP" ] || { echo "::error::VM NIC has a public IP"; exit 1; }
           [ "$OPEN" = "0" ] || { echo "::error::VM NSG allows inbound from the internet"; exit 1; }
           echo "$BAS" | grep -q "Succeeded" || { echo "::error::Bastion not ready"; exit 1; }
+          echo "$BAS" | grep -qi "true" || { echo "::error::Bastion native-client tunneling disabled"; exit 1; }

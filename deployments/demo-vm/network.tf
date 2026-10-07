@@ -193,4 +193,14 @@ resource "azapi_resource" "bastion" {
     create = "45m"
     delete = "45m"
   }
+
+  # Serialize VNet writes: Bastion updates AzureBastionSubnet, so it must not
+  # run while snet-vm is still being written (AnotherOperationInProgress).
+  depends_on = [azapi_resource.snet_vm]
+
+  retry = {
+    error_message_regex  = ["AnotherOperationInProgress", "RetryableError", "ReferencedResourceNotProvisioned"]
+    interval_seconds     = 20
+    max_interval_seconds = 120
+  }
 }
