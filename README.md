@@ -1090,8 +1090,8 @@ module "aks" {
   enable_byo_vnet                = true
   external_node_subnet_id        = local.node_subnet_id              # NSG + NAT Gateway
   external_apiserver_subnet_id   = local.apiserver_subnet_id         # delegated /28 + NSG
-  external_system_node_subnet_id = local.system_node_subnet_id       # /26 + NSG + NAT Gateway
-  user_assigned_identity_id      = azapi_resource.uami_cluster.id    # Network Contributor on the VNet
+  external_system_node_subnet_id = azapi_resource.snet_system.id          # /26 + NSG + NAT Gateway
+  user_assigned_identity_id      = terraform_data.cluster_identity.output # after its VNet role
   egress_type                    = "userAssignedNATGateway"          # NAT Gateway on the subnets
 
   enable_managed_nginx              = true

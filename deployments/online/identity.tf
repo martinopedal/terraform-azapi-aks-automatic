@@ -35,3 +35,15 @@ resource "azapi_resource" "ra_cluster_vnet" {
 
   depends_on = [azapi_resource.vnet]
 }
+
+# Ordering anchor: the cluster must not be created before the identity has
+# Network Contributor on the VNet. A module-level depends_on would defer the
+# module's data sources whenever any dependency has a pending change, making
+# parent_id unknown and forcing cluster replacement (blocked by
+# prevent_destroy, observed Oct 2026). This anchor carries the identity ID
+# into the module and stays known at plan time once created.
+resource "terraform_data" "cluster_identity" {
+  input = azapi_resource.uami_cluster.id
+
+  depends_on = [azapi_resource.ra_cluster_vnet]
+}
