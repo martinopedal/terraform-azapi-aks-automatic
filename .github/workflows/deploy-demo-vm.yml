@@ -137,28 +137,40 @@ jobs:
           set -e
           RG=rg-demo-vm-online
           VM=vm-demo-copilot
+          # Landing-zone policies keep updating the VM (agents, platform
+          # identity) for several minutes after creation, which holds the
+          # VM and our extension in "Updating". Wait for a terminal state
+          # (bounded) instead of asserting a moving target.
+          for i in $(seq 1 40); do
+            VMSTATE=$(az vm get-instance-view -g $RG -n $VM --query "instanceView.statuses[?starts_with(code,'ProvisioningState/')].code | [0]" -o tsv)
+            AAD=$(az vm extension show -g $RG --vm-name $VM -n AADLoginForWindows --query provisioningState -o tsv)
+            [ "$VMSTATE" = "ProvisioningState/succeeded" ] && [ "$AAD" = "Succeeded" ] && break
+            [ "$AAD" = "Failed" ] && break
+            echo "Waiting for VM and extension to settle ($i/40): vm=$VMSTATE aad=$AAD"; sleep 30
+          done
           POWER=$(az vm get-instance-view -g $RG -n $VM --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus | [0]" -o tsv)
-          AAD=$(az vm extension show -g $RG --vm-name $VM -n AADLoginForWindows --query provisioningState -o tsv)
           TL=$(az vm show -g $RG -n $VM --query "securityProfile.securityType" -o tsv)
           SB=$(az vm show -g $RG -n $VM --query "securityProfile.uefiSettings.secureBootEnabled" -o tsv)
           PIP=$(az network nic show -g $RG -n nic-demo-copilot --query "ipConfigurations[0].publicIPAddress.id" -o tsv)
           OPEN=$(az network nsg rule list -g $RG --nsg-name nsg-demo-copilot-vm --query "[?direction=='Inbound' && access=='Allow' && (sourceAddressPrefix=='*' || sourceAddressPrefix=='Internet')] | length(@)" -o tsv)
-          BAS=$(az network bastion show -g $RG -n bas-demo-copilot --query "{s:provisioningState,t:enableTunneling,sku:sku.name}" -o tsv)
+          # az resource show needs no CLI extension (az network bastion does).
+          BAS=$(az resource show -g $RG -n bas-demo-copilot --resource-type Microsoft.Network/bastionHosts --query "join(' ', [properties.provisioningState, to_string(properties.enableTunneling), sku.name])" -o tsv)
+          EXTS=$(az vm extension list -g $RG --vm-name $VM --query "join(', ', [].name)" -o tsv)
           {
             echo "### Demo VM"
             echo "| Check | Result |"
             echo "| --- | --- |"
-            echo "| Power state | $POWER |"
+            echo "| Power / provisioning | $POWER / ${VMSTATE#ProvisioningState/} |"
             echo "| Entra ID login extension | $AAD |"
             echo "| Trusted Launch / Secure Boot | $TL / $SB |"
             echo "| Public IP on VM NIC | ${PIP:-none} |"
             echo "| NSG inbound allows from Internet/* | $OPEN |"
             echo "| Bastion (state, tunneling, SKU) | $BAS |"
+            echo "| VM extensions (incl. landing-zone policy) | $EXTS |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$POWER" = "VM running" ] || { echo "::error::VM is not running"; exit 1; }
-          [ "$AAD" = "Succeeded" ] || { echo "::error::Entra login extension not ready"; exit 1; }
+          [ "$AAD" = "Succeeded" ] || { echo "::error::Entra login extension not ready: $AAD"; exit 1; }
           [ "$TL" = "TrustedLaunch" ] && [ "$SB" = "true" ] || { echo "::error::Trusted Launch not enabled"; exit 1; }
           [ -z "$PIP" ] || { echo "::error::VM NIC has a public IP"; exit 1; }
           [ "$OPEN" = "0" ] || { echo "::error::VM NSG allows inbound from the internet"; exit 1; }
-          echo "$BAS" | grep -q "Succeeded" || { echo "::error::Bastion not ready"; exit 1; }
-          echo "$BAS" | grep -qi "true" || { echo "::error::Bastion native-client tunneling disabled"; exit 1; }
+          [ "$BAS" = "Succeeded true Standard" ] || { echo "::error::Bastion not ready or tunneling disabled: $BAS"; exit 1; }
