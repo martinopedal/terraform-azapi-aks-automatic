@@ -1,13 +1,11 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 (2026-10-07)
 
-- **Fixed `Invalid count argument`** when a caller creates the subnets in the same root: new optional `use_external_subnets` (bool). When set, the module's network `count` no longer depends on subnet IDs that are unknown at plan time; when null, behavior is unchanged (inferred). Regression test `tests/external_subnets.tftest.hcl` uses a caller fixture that reproduces the original error without the flag and passes with it. `deployments/online` now passes real subnet references.
+- Demo environment moved to [martinopedal/aks-automatic-demo-env](https://github.com/martinopedal/aks-automatic-demo-env); retired Corp demo artifacts and backend files were removed from this reusable module repository. No module interface change.
+- **Fixed `Invalid count argument`** when a caller creates the subnets in the same root: new optional `use_external_subnets` (bool). When set, the module's network `count` no longer depends on subnet IDs that are unknown at plan time; when null, behavior is unchanged (inferred). Regression test `tests/external_subnets.tftest.hcl` uses a caller fixture that reproduces the original error without the flag and passes with it.
 - **Fixed a scanning blind spot:** Checkov's HCL parser rejected `main.tf` (bare `for` object keys in the Prometheus alert rules), so the cluster definition was never scanned. Keys are now quoted (`"for" = ...`); same semantics, and every `.tf` file parses with Checkov's parser.
-- **Hardened the generic Corp example** (`manifests/`): unprivileged nginx on 8080 pinned by digest, UID/GID 10001, read-only root filesystem, resources and probes (Trivy: 8 findings to 1 documented, scoped exception). Removed a real resource ID from `gateway.yaml`.
-- **Removed real environment data** from the public repo: `env/prod.tfvars` deleted (use `terraform.tfvars.example`), subscription ID removed from workflows. These are identifiers, not credentials; history is not rewritten.
-- **Retired dead workflows** (`deploy.yml`, `apply-store-app.yml`, `apply-store-app-mi.yml`): they target runners and a registry that do not exist. Disabled, annotated, and `deploy.yml`'s missing `needs: plan` fixed.
-- **Operator scripts and runbook:** `scripts/Invoke-GatedRun.ps1` (dispatch, wait for the environment gate before approving, wait for the result), `Test-OnlineSecurity.ps1` (28 read-back checks, prints the app URL), `Test-DemoVm.ps1` (14 checks including a clean start that scans every user profile, because Run Command as SYSTEM cannot see per-user WinGet installs), and `Connect-DemoVm.ps1` (Bastion RDP with Entra MFA). New `docs/operations-runbook.md`: plan-then-apply flow, demo VM, known races, and teardown including the policy-created backup vault.
+- **Removed real environment data** from the public repo: `env/prod.tfvars` deleted and subscription ID removed from workflows. These are identifiers, not credentials; history is not rewritten.
 
 ## v0.5.0 (2026-10-06)
 
@@ -19,8 +17,8 @@
 - **New: `cluster_sku = "Automatic"` (opt-in).** Creates the AKS Automatic SKU with managed system node pools (`hostedSystemProfile`) on API `2026-04-01`, using the shape validated in the session's Corp module. Requires external BYO subnets, the new `external_system_node_subnet_id` (at least /26, not delegated), and `user_assigned_identity_id`. Keys AKS manages for Automatic (`agentPoolProfiles`, add-ons) are omitted rather than sent as null. Tests: `tests/automatic.tftest.hcl` (written first).
 - **Default unchanged:** `cluster_sku = "Base"` keeps the original body and API version (`2025-10-01`): AKS Standard SKU with Automatic-style features. AKS does not support migrating a Base cluster to Automatic (an in-place attempt, #133, was rejected and reverted in #134); switching needs a new cluster.
 - **Provider:** `azure/azapi` constraint `~> 2.4` to `~> 2.12.0` (locked 2.12.0, the version validated with `2026-04-01` in the Corp module; 2.9.0 has no `2026-04-01` schema). `hashicorp/azurerm` lock 4.68.0 to 4.81.0 (within `~> 4.2`).
-- Added `deployments/online/`: a thin root that consumes the module for an ALZ Online subscription (BYO spoke with NSGs and NAT Gateway, user-assigned identity with subnet-scoped rights, API server authorized IPs, AKS managed namespace) and `.github/workflows/deploy-online.yml`.
-- Known limitation: `count` in `network.tf` is keyed on `external_node_subnet_id != null`, which is unknown when the caller creates the subnet in the same root. Pass plan-time-known IDs (see `deployments/online/`). A boolean input is the planned fix.
+- Added an Online landing-zone demo consumer root with BYO spoke NSGs, NAT Gateway, user-assigned identity with subnet-scoped rights, API server authorized IPs, and an AKS managed namespace.
+- Known limitation: `count` in `network.tf` is keyed on `external_node_subnet_id != null`, which is unknown when the caller creates the subnet in the same root. Pass plan-time-known IDs from the caller. A boolean input is the planned fix.
 
 ## v0.3.0
 

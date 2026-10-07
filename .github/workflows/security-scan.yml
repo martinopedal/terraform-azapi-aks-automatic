@@ -33,7 +33,7 @@ jobs:
           soft_fail: false
           output_format: cli,sarif
           output_file_path: console,results.sarif
-          skip_check: CKV_TF_1  # Skip module source pinning (this is a root module)
+          skip_check: CKV_TF_1  # Skip source pinning for this module's own scan
 
       - name: Upload SARIF
         if: always()

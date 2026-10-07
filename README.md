@@ -9,6 +9,7 @@
 - [Network egress requirements](#network-egress-requirements)
 - [AS-BUILT Deployment Contract](#as-built-deployment-contract)
 - [Deployment Scenarios](#deployment-scenarios)
+- [Example consumer](#example-consumer)
 - [Connect to the Cluster](#connect-to-the-cluster)
 - [Post-Deployment Checklist](#post-deployment-checklist)
 
@@ -53,14 +54,14 @@
 
 ## Overview
 
-This repository contains a Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resource creation. It is designed for deployment into an **Azure Landing Zone (ALZ) Corp** spoke subscription with private connectivity.
+This repository contains a reusable Terraform module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resource creation. It is designed for deployment into an **Azure Landing Zone (ALZ) Corp** spoke subscription with private connectivity.
 
-> **SKU choice (October 2026):** by default (`cluster_sku = "Base"`) the module deploys the AKS **Standard** SKU with Automatic-style features (node auto-provisioning, Azure CNI Overlay with Cilium, Entra RBAC only, workload identity, managed NGINX). Set `cluster_sku = "Automatic"` for the **AKS Automatic** SKU with managed system node pools; it needs BYO subnets including a system node subnet and a user-assigned identity. AKS cannot convert an existing Base cluster to Automatic. See [CHANGELOG.md](CHANGELOG.md) and Scenario 8.
+> **SKU choice (October 2026):** by default (`cluster_sku = "Base"`) the module deploys the AKS **Standard** SKU with Automatic-style features (node auto-provisioning, Azure CNI Overlay with Cilium, Entra RBAC only, workload identity, managed NGINX). Set `cluster_sku = "Automatic"` for the **AKS Automatic** SKU with managed system node pools; it needs BYO subnets including a system node subnet and a user-assigned identity. AKS cannot convert an existing Base cluster to Automatic. See [CHANGELOG.md](CHANGELOG.md).
 
 The module supports:
 
 - BYO VNet target architecture with four subnets (nodes, API server, AGC, private endpoints). This module implements the node, API server, optional AGC, and private endpoint subnets in standalone mode, or consumes external subnet IDs in vending mode.
-- Egress options: User-Defined Routing through hub firewall (Corp default), a caller-attached NAT Gateway (`userAssignedNATGateway`, for Online spokes), and Standard Load Balancer (dev/test only). Managed NAT Gateway is available only with an AKS-managed VNet.
+- Egress options: User-Defined Routing through hub firewall (Corp default), a caller-attached NAT Gateway (`userAssignedNATGateway`, for BYO subnets), and Standard Load Balancer (dev/test only). Managed NAT Gateway is available only with an AKS-managed VNet.
 - Default ingress: Application Gateway for Containers managed add-on (public preview on AKS Automatic). Managed NGINX Application Routing is opt-in via `enable_managed_nginx` and disabled when AGC is enabled.
 - Private cluster with VNet-integrated API server
 - Full ALZ hub-spoke integration with Azure Firewall, Private DNS Zones, and ExpressRoute
@@ -72,15 +73,22 @@ The module supports:
 
 ## Quick Start
 
-```bash
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars for your environment
+```hcl
+module "aks_automatic" {
+  source = "git::https://github.com/martinopedal/terraform-azapi-aks-automatic.git?ref=v0.6.0"
 
-terraform init
-terraform validate
-terraform plan
-terraform apply
+  resource_group_name = "rg-aks-automatic"
+  location            = "swedencentral"
+  cluster_name        = "aks-automatic"
+
+  enable_byo_vnet              = true
+  external_node_subnet_id      = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<node-subnet>"
+  external_apiserver_subnet_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<api-subnet>"
+  firewall_private_ip          = "10.0.1.4"
+}
 ```
+
+Run `terraform init`, `terraform validate`, `terraform plan`, and `terraform apply` from your consumer root module after adding provider configuration, backend configuration, and environment-specific values there.
 
 ## Prerequisites
 
@@ -112,7 +120,7 @@ az provider register --namespace Microsoft.ContainerService
 ```
 
 **Before `terraform apply` (ALZ Corp):**
-- **Remote backend:** Configure an Azure Storage backend for state persistence and locking. This module uses `prevent_destroy` on critical resources; local state is not suitable for production. Create a `backend.tf` with your storage account details.
+- **Caller state:** Configure remote state persistence and locking in the consumer root module. This reusable module intentionally does not declare state backend settings; callers own state storage, locking, and access controls.
 - **Resource group:** Set `create_resource_group = false` to deploy into a pre-provisioned resource group (common for ALZ vending/adoption); the module constructs the RG ID in the current subscription.
 - **Subnets (vending mode):** If using `external_*_subnet_id` variables, ensure the node subnet, API server subnet (delegated to `Microsoft.ContainerService/managedClusters`), AGC subnet (dedicated `/24`, delegated to `Microsoft.ServiceNetworking/trafficControllers`), and PE subnet are pre-provisioned by the ALZ vending pipeline. Because AGC is mandatory/default, `app_gateway_for_containers_subnet_id` is required in BYO-RG/external-subnet mode.
 - **Firewall rules:** When using `egress_type = "userDefinedRouting"`, the hub Azure Firewall must whitelist all [AKS required outbound FQDNs](https://learn.microsoft.com/azure/aks/outbound-rules-control-egress). The `AzureKubernetesService` FQDN tag covers most requirements.
@@ -547,7 +555,7 @@ Cheap levers:
 
 - `system_node_vm_size = "Standard_D2s_v5"` by default. This is the smallest reliable D-series choice for AKS Automatic/NAP default pools. NAP's default `NodePool` constrains user nodes to SKU family `D`, so burstable B-series (for example `Standard_B2s`) is not the safe default.
 - Use `create_resource_group = false` for ALZ-adopted resource groups to avoid state ownership of shared RGs.
-- Keep Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault disabled unless the demo explicitly needs them. AGC is on by default for ingress standardisation.
+- Keep Defender, Prometheus, Container Insights, cost analysis, ACR, and Key Vault disabled unless the workload explicitly needs them. AGC is on by default for ingress standardisation.
 - To constrain NAP user nodes further, apply Karpenter `NodePool` / `AKSNodeClass` CRDs after cluster creation (for example with `karpenter.azure.com/sku-name`). This module does not add a Kubernetes provider to avoid kube-auth complexity.
 
 ### Auto-Upgrade and Maintenance
@@ -959,8 +967,7 @@ terraform-azapi-aks-automatic/
 ├── network.tf                # BYO VNet resources (conditional)
 ├── dependencies.tf           # ACR, Key Vault, PEs, RBAC
 ├── main.tf                   # Resource group + AKS cluster
-├── outputs.tf                # Outputs
-└── terraform.tfvars.example  # Example values for common scenarios
+└── outputs.tf                # Outputs
 ```
 
 | File | Responsibility |
@@ -973,7 +980,6 @@ terraform-azapi-aks-automatic/
 | `dependencies.tf` | ACR, Key Vault, Private Endpoints, DNS Zone Groups, RBAC role assignments |
 | `main.tf` | Resource group (azapi) + AKS Automatic cluster (azapi) |
 | `outputs.tf` | Exported values: FQDN, OIDC URL, subnet IDs, resource IDs, identity principals |
-| `terraform.tfvars.example` | Copy to `terraform.tfvars` and customise |
 
 ### Why azapi
 
@@ -997,7 +1003,6 @@ The azapi provider communicates directly with the Azure Resource Manager REST AP
 | App Routing + DNS | Managed ingress + DNS integration | `dns_zone_resource_ids` |
 | HTTP Proxy | Forced outbound proxy/TLS interception | `http_proxy_config` |
 | Defender | Runtime threat detection | `enable_defender`, `log_analytics_workspace_id` |
-| Online Landing Zone (simplified) | Internet-facing demo/showcase workload, no hub peering | `enable_byo_vnet = false`, `enable_managed_nginx = true`, `enable_private_cluster = false` |
 
 ### Scenario 1: External Subnets + UDR through Hub Firewall (Corp default)
 
@@ -1070,78 +1075,19 @@ enable_defender            = true
 log_analytics_workspace_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace>"
 ```
 
-### Scenario 8: Online Landing Zone (simplified)
+## Example consumer
 
-A smaller topology for an internet-facing demo workload in an ALZ
-**Online** subscription, not Corp: no hub peering, a public API server
-(Entra RBAC only, local accounts disabled), and managed NGINX ingress.
-It is still deployed under the landing zone's real guardrails.
+A complete gated-pipeline consumer now lives in [martinopedal/aks-automatic-demo-env](https://github.com/martinopedal/aks-automatic-demo-env). It builds the Online landing-zone AKS Automatic demo environment with NAT Gateway, App Routing ingress, a demo app, and a demo VM. That repository owns environment-specific providers, state backend configuration, workflow gates, runner setup, app manifests, and operator scripts.
 
-`deployments/online/` is a thin root that consumes this module with
-`source = "../.."` and owns everything environment-specific: providers,
-backend, the spoke network, and the app namespace. The module stays
-provider-free and reusable.
+Pin this module by tag from the consumer root:
 
 ```hcl
 module "aks" {
-  source = "../.."
+  source = "git::https://github.com/martinopedal/terraform-azapi-aks-automatic.git?ref=v0.6.0"
 
-  cluster_sku                    = "Automatic"                       # managed system node pools
-  enable_byo_vnet                = true
-  external_node_subnet_id        = local.node_subnet_id              # NSG + NAT Gateway
-  external_apiserver_subnet_id   = local.apiserver_subnet_id         # delegated /28 + NSG
-  external_system_node_subnet_id = azapi_resource.snet_system.id          # /26 + NSG + NAT Gateway
-  user_assigned_identity_id      = terraform_data.cluster_identity.output # after its VNet role
-  egress_type                    = "userAssignedNATGateway"          # NAT Gateway on the subnets
-
-  enable_managed_nginx              = true
-  enable_app_gateway_for_containers = false
-  enable_private_cluster            = false
+  # Pass the inputs for your landing zone here.
 }
 ```
-
-Why BYO network and not an AKS-managed VNet: the landing zone denies
-subnets without an NSG (`Deny-Subnet-Without-Nsg`), and an AKS-managed VNet
-creates its subnets without one. The managed-VNet attempt was rejected by
-policy, so the root provisions NSG-protected subnets plus an explicit NAT
-Gateway, the same vending split the Corp path uses.
-
-How the pipeline (`.github/workflows/deploy-online.yml`) deploys securely:
-
-- **No stored Azure secrets.** GitHub OIDC, separate identity scoped to the
-  online resource group: Contributor, AKS RBAC Writer, and a
-  Role Based Access Control Administrator assignment that an ABAC condition
-  limits to granting Network Contributor to service principals.
-- **Cluster identity granted before creation.** A user-assigned identity
-  created in the root gets Network Contributor on the VNet (required by AKS
-  Automatic for Node Auto-Provisioning) before the cluster exists.
-- **Locked API server.** The public endpoint accepts only the runner's
-  static egress IP (`authorized_ip_ranges` from the GitHub environment).
-- **Human gate.** The `online` GitHub Environment requires a reviewer and
-  accepts protected branches only.
-- **Private state.** A tenant policy forces `publicNetworkAccess=Disabled`
-  on storage accounts, so state is reachable only through a private
-  endpoint. Plan and apply run on an ephemeral, VNet-integrated self-hosted
-  runner (Azure Container Apps Job, no managed identity). Start one
-  execution with `scripts/start-online-runner.ps1` before dispatching, or
-  use `scripts/Invoke-GatedRun.ps1 -StartRunner`, which also handles the
-  approval gate and waits for the result. Day-to-day operation, the demo VM,
-  verification scripts, and teardown are in the
-  [operations runbook](docs/operations-runbook.md).
-- **One job, one approval.** Plan, apply, app deploy, and proof run in one
-  job; the repo is public, so `tfplan` is never uploaded as an artifact.
-- **Least-privilege app deploy.** The namespace is an AKS managed namespace
-  created by Terraform through ARM (Pod Security `restricted`, default-deny
-  ingress and egress, resource quota). The pipeline only needs
-  namespace-level writes; listing cluster nodes is forbidden by design.
-- **Proof, not hope.** The run fails unless HTTPS returns 200 and the live
-  Ingress forces HTTPS with TLS, and writes the result to the run summary.
-
-`manifests-online/` holds the app: a distroless, non-root ASP.NET Core
-sample from MCR on port 8080, pinned by digest, with a read-only root
-filesystem; a NetworkPolicy that admits only the App Routing NGINX
-controller; and an HTTPS-only Ingress (controller default certificate; use
-Key Vault for production).
 
 ### Connect to the Cluster
 

@@ -38,7 +38,7 @@ Stay on `main` until you need to make changes. When making changes:
 
 ## What this repo is
 
-A Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resources. The azurerm provider is present only for the `data.azurerm_client_config` data source.
+A reusable Terraform module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resources. The azurerm provider is present only for the `data.azurerm_client_config` data source.
 
 ## Commands
 
@@ -66,7 +66,7 @@ Key sources to validate against:
 
 Use the `azure-mcp-documentation` MCP tool with `microsoft_docs_fetch` to retrieve current page content when validating claims.
 
-No test framework is configured. Validate changes with `terraform validate`. Always run `terraform validate` after any code modification before committing.
+Terraform tests are configured under `tests/`. Validate Terraform changes with `terraform fmt -check -recursive`, `terraform init -backend=false -input=false`, `terraform validate`, and `terraform test` before committing.
 
 ## Architecture
 

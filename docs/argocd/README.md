@@ -26,7 +26,8 @@ kubectl apply -f 01-namespace.yaml
 kubectl apply -f 02-network-policy.yaml
 
 # 2. Install ArgoCD (CRDs must exist before ApplicationSet)
-curl -sL https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.2/manifests/install.yaml > argocd-install.yaml
+ARGOCD_INSTALL_BASE="https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.2/manifests"
+curl -sL "${ARGOCD_INSTALL_BASE}/install.yaml" > argocd-install.yaml
 
 # Patch image references to use private ACR
 ACR_SERVER=$(terraform output -raw acr_login_server)
