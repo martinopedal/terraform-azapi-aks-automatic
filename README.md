@@ -1123,7 +1123,11 @@ How the pipeline (`.github/workflows/deploy-online.yml`) deploys securely:
   on storage accounts, so state is reachable only through a private
   endpoint. Plan and apply run on an ephemeral, VNet-integrated self-hosted
   runner (Azure Container Apps Job, no managed identity). Start one
-  execution with `scripts/start-online-runner.ps1` before dispatching.
+  execution with `scripts/start-online-runner.ps1` before dispatching, or
+  use `scripts/Invoke-GatedRun.ps1 -StartRunner`, which also handles the
+  approval gate and waits for the result. Day-to-day operation, the demo VM,
+  verification scripts, and teardown are in the
+  [operations runbook](docs/operations-runbook.md).
 - **One job, one approval.** Plan, apply, app deploy, and proof run in one
   job; the repo is public, so `tfplan` is never uploaded as an artifact.
 - **Least-privilege app deploy.** The namespace is an AKS managed namespace

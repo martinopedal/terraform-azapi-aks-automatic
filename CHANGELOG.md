@@ -7,6 +7,7 @@
 - **Hardened the generic Corp example** (`manifests/`): unprivileged nginx on 8080 pinned by digest, UID/GID 10001, read-only root filesystem, resources and probes (Trivy: 8 findings to 1 documented, scoped exception). Removed a real resource ID from `gateway.yaml`.
 - **Removed real environment data** from the public repo: `env/prod.tfvars` deleted (use `terraform.tfvars.example`), subscription ID removed from workflows. These are identifiers, not credentials; history is not rewritten.
 - **Retired dead workflows** (`deploy.yml`, `apply-store-app.yml`, `apply-store-app-mi.yml`): they target runners and a registry that do not exist. Disabled, annotated, and `deploy.yml`'s missing `needs: plan` fixed.
+- **Operator scripts and runbook:** `scripts/Invoke-GatedRun.ps1` (dispatch, wait for the environment gate before approving, wait for the result), `Test-OnlineSecurity.ps1` (28 read-back checks, prints the app URL), `Test-DemoVm.ps1` (14 checks including a clean start that scans every user profile, because Run Command as SYSTEM cannot see per-user WinGet installs), and `Connect-DemoVm.ps1` (Bastion RDP with Entra MFA). New `docs/operations-runbook.md`: plan-then-apply flow, demo VM, known races, and teardown including the policy-created backup vault.
 
 ## v0.5.0 (2026-10-06)
 
