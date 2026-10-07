@@ -4,7 +4,7 @@ terraform {
   required_providers {
     azapi = {
       source  = "azure/azapi"
-      version = "~> 2.4"
+      version = "~> 2.12.0"
     }
     # azurerm is used only for data sources (client config / subscription context).
     # All Azure resources are created with azapi.

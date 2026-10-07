@@ -55,7 +55,7 @@
 
 This repository contains a Terraform root module that deploys an **AKS Automatic** cluster using the **azapi provider** exclusively for all Azure resource creation. It is designed for deployment into an **Azure Landing Zone (ALZ) Corp** spoke subscription with private connectivity.
 
-> **Known gap (October 2026):** the cluster body sends `sku.name = "Base"`, so the deployed cluster is the AKS **Standard** SKU with Automatic-style features (node auto-provisioning, Azure CNI Overlay with Cilium, Entra RBAC only, workload identity, managed NGINX). AKS rejects an in-place switch to the `Automatic` SKU for this body shape. See [CHANGELOG.md](CHANGELOG.md).
+> **SKU choice (October 2026):** by default (`cluster_sku = "Base"`) the module deploys the AKS **Standard** SKU with Automatic-style features (node auto-provisioning, Azure CNI Overlay with Cilium, Entra RBAC only, workload identity, managed NGINX). Set `cluster_sku = "Automatic"` for the **AKS Automatic** SKU with managed system node pools; it needs BYO subnets including a system node subnet and a user-assigned identity. AKS cannot convert an existing Base cluster to Automatic. See [CHANGELOG.md](CHANGELOG.md) and Scenario 8.
 
 The module supports:
 
@@ -1086,10 +1086,13 @@ provider-free and reusable.
 module "aks" {
   source = "../.."
 
-  enable_byo_vnet              = true
-  external_node_subnet_id      = azapi_resource.snet_nodes.id     # NSG + NAT Gateway
-  external_apiserver_subnet_id = azapi_resource.snet_apiserver.id # delegated /28 + NSG
-  egress_type                  = "userAssignedNATGateway"         # NAT Gateway on the node subnet
+  cluster_sku                    = "Automatic"                       # managed system node pools
+  enable_byo_vnet                = true
+  external_node_subnet_id        = local.node_subnet_id              # NSG + NAT Gateway
+  external_apiserver_subnet_id   = local.apiserver_subnet_id         # delegated /28 + NSG
+  external_system_node_subnet_id = local.system_node_subnet_id       # /26 + NSG + NAT Gateway
+  user_assigned_identity_id      = azapi_resource.uami_cluster.id    # Network Contributor on the VNet
+  egress_type                    = "userAssignedNATGateway"          # NAT Gateway on the subnets
 
   enable_managed_nginx              = true
   enable_app_gateway_for_containers = false
@@ -1109,9 +1112,9 @@ How the pipeline (`.github/workflows/deploy-online.yml`) deploys securely:
   online resource group: Contributor, AKS RBAC Writer, and a
   Role Based Access Control Administrator assignment that an ABAC condition
   limits to granting Network Contributor to service principals.
-- **Least-privilege cluster identity.** A user-assigned identity created in
-  the root gets Network Contributor on the two AKS subnets only, before the
-  cluster exists.
+- **Cluster identity granted before creation.** A user-assigned identity
+  created in the root gets Network Contributor on the VNet (required by AKS
+  Automatic for Node Auto-Provisioning) before the cluster exists.
 - **Locked API server.** The public endpoint accepts only the runner's
   static egress IP (`authorized_ip_ranges` from the GitHub environment).
 - **Human gate.** The `online` GitHub Environment requires a reviewer and

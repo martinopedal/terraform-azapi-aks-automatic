@@ -54,6 +54,22 @@ locals {
   # for custom private DNS zones (enforced by a precondition in main.tf).
   use_user_assigned_identity = var.user_assigned_identity_id != null
 
+  # --- SKU ---
+  # Automatic uses managed system node pools (hostedSystemProfile), which
+  # needs a newer API version. Base keeps the original API version and body.
+  is_automatic    = var.cluster_sku == "Automatic"
+  aks_api_version = local.is_automatic ? "2026-04-01" : "2025-10-01"
+
+  container_insights_addon = {
+    omsagent = {
+      enabled = true
+      config = {
+        logAnalyticsWorkspaceResourceID = var.log_analytics_workspace_id
+        useAADAuth                      = true
+      }
+    }
+  }
+
   # --- Tags ---
   tags = var.tags
 }

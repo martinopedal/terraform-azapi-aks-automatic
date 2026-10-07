@@ -16,29 +16,29 @@ resource "azapi_resource" "rg" {
 }
 
 # =============================================================================
-# AKS cluster with AKS Automatic-style configuration
+# AKS cluster: Automatic SKU (opt-in) or Standard SKU with Automatic features
 #
-# Known gap (see CHANGELOG): this body sends sku.name = "Base" (AKS Standard
-# SKU, Standard tier) with Automatic-style features: node auto-provisioning
-# (nodeProvisioningProfile.mode = "Auto"), Azure CNI Overlay + Cilium, Entra
-# RBAC only, workload identity, managed NGINX.
+# cluster_sku = "Base" (default, unchanged): AKS Standard SKU with an
+#   explicit system pool and Automatic-style features (node auto-provisioning,
+#   Azure CNI Overlay + Cilium, Entra RBAC only, workload identity).
 #
-# A true "Automatic" SKU is rejected for this shape: AKS requires Azure
-# Policy, the Key Vault secrets provider, ephemeral OS disks and disabled SSH
-# on the system pool (observed on an in-place update, Oct 6 2026). The
-# validated Automatic shape (hostedSystemProfile, no explicit system pool)
-# is in the session's Corp module.
+# cluster_sku = "Automatic": AKS Automatic SKU with managed system node pools
+#   (hostedSystemProfile, API 2026-04-01), the shape validated in the
+#   session's Corp module. AKS manages the system pool and add-ons, so those
+#   keys are omitted. AKS does not migrate Base clusters to Automatic: an
+#   in-place attempt was rejected (needs Azure Policy, Key Vault secrets
+#   provider, ephemeral OS disks, SSH disabled); switching needs a new cluster.
 # =============================================================================
 
 resource "azapi_resource" "aks" {
-  type      = "Microsoft.ContainerService/managedClusters@2025-10-01"
+  type      = "Microsoft.ContainerService/managedClusters@${local.aks_api_version}"
   name      = var.cluster_name
   location  = local.rg_location
   parent_id = local.rg_id
   tags      = local.tags
 
-  # Identity type is determined by whether a custom private DNS zone is used.
-  # Custom private DNS zones require UserAssigned identity; otherwise SystemAssigned.
+  # UserAssigned whenever user_assigned_identity_id is set (required for BYO
+  # subnets, custom private DNS, and the Automatic SKU); otherwise SystemAssigned.
   identity {
     type         = local.use_user_assigned_identity ? "UserAssigned" : "SystemAssigned"
     identity_ids = local.use_user_assigned_identity ? [var.user_assigned_identity_id] : null
@@ -46,11 +46,14 @@ resource "azapi_resource" "aks" {
 
   body = {
     sku = {
-      name = "Base"
+      name = var.cluster_sku
       tier = "Standard"
     }
 
-    properties = {
+    # Common properties, then SKU-specific keys. Keys that AKS manages for
+    # the Automatic SKU are omitted (not null): azapi tracks null keys and
+    # AKS fills them, which causes rejection or perpetual drift.
+    properties = merge({
 
       dnsPrefix = var.cluster_name
 
@@ -62,22 +65,6 @@ resource "azapi_resource" "aks" {
         mode             = "Auto"
         defaultNodePools = "Auto"
       }
-
-      # ----- Agent pool ---------------------------------------------------------
-      # The system pool is auto-managed. When using BYO VNet the pool must
-      # reference the node subnet so that worker nodes land in your network.
-      agentPoolProfiles = [
-        {
-          name         = "systempool"
-          mode         = "System"
-          type         = "VirtualMachineScaleSets"
-          count        = 1
-          osType       = "Linux"
-          osSKU        = "AzureLinux"
-          vmSize       = var.system_node_vm_size
-          vnetSubnetID = local.node_subnet_id # null → managed VNet
-        }
-      ]
 
       # ----- Networking ---------------------------------------------------------
       # Azure CNI Overlay + Cilium is preconfigured in Automatic.
@@ -194,17 +181,6 @@ resource "azapi_resource" "aks" {
         }
       }
 
-      # ----- Container Insights -------------------------------------------------
-      addonProfiles = var.enable_container_insights ? {
-        omsagent = {
-          enabled = true
-          config = {
-            logAnalyticsWorkspaceResourceID = var.log_analytics_workspace_id
-            useAADAuth                      = true
-          }
-        }
-      } : null
-
       # ----- Cost analysis ------------------------------------------------------
       # Always send the API's own shape. AKS returns enabled = false when
       # disabled; sending null caused a perpetual in-place diff.
@@ -255,7 +231,43 @@ resource "azapi_resource" "aks" {
       nodeResourceGroupProfile = {
         restrictionLevel = "ReadOnly"
       }
-    }
+      },
+
+      # ----- Base SKU only: explicit system pool and add-on profile ------------
+      # Unchanged from the original body. When using BYO VNet the pool must
+      # reference the node subnet so that worker nodes land in your network.
+      { for k, v in {
+        agentPoolProfiles = [
+          {
+            name         = "systempool"
+            mode         = "System"
+            type         = "VirtualMachineScaleSets"
+            count        = 1
+            osType       = "Linux"
+            osSKU        = "AzureLinux"
+            vmSize       = var.system_node_vm_size
+            vnetSubnetID = local.node_subnet_id # null → managed VNet
+          }
+        ]
+        addonProfiles = var.enable_container_insights ? local.container_insights_addon : null
+      } : k => v if !local.is_automatic },
+
+      # ----- Automatic SKU only: managed system node pools ---------------------
+      # AKS hosts the system pool; system components run in the system node
+      # subnet and user nodes (Node Auto-Provisioning) in the node subnet.
+      { for k, v in {
+        hostedSystemProfile = {
+          enabled            = true
+          nodeSubnetID       = local.node_subnet_id
+          systemNodeSubnetID = var.external_system_node_subnet_id
+        }
+      } : k => v if local.is_automatic },
+
+      # Container Insights on the Automatic SKU: send only when enabled.
+      { for k, v in {
+        addonProfiles = local.container_insights_addon
+      } : k => v if local.is_automatic && var.enable_container_insights },
+    )
   }
 
   response_export_values = ["*"]
@@ -269,6 +281,16 @@ resource "azapi_resource" "aks" {
     ignore_changes = [
       body.properties.kubernetesVersion,
     ]
+
+    precondition {
+      condition     = !local.is_automatic || (local.use_external_subnets && var.external_system_node_subnet_id != null)
+      error_message = "cluster_sku = Automatic requires external BYO subnets (external_node_subnet_id, external_apiserver_subnet_id) and external_system_node_subnet_id for managed system node pools."
+    }
+
+    precondition {
+      condition     = !local.is_automatic || var.user_assigned_identity_id != null
+      error_message = "cluster_sku = Automatic with a custom VNet requires user_assigned_identity_id (grant it Network Contributor on the VNet before cluster creation)."
+    }
 
     precondition {
       condition = (

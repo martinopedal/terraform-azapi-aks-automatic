@@ -7,8 +7,12 @@
 # network live here (network.tf).
 #
 # Internet-facing demo workload, not Corp:
+#   - cluster_sku = "Automatic": AKS Automatic SKU with managed system node
+#     pools (hostedSystemProfile). Created new; AKS does not migrate Base
+#     clusters to Automatic.
 #   - BYO spoke from network.tf: NSG on every subnet (landing-zone policy),
-#     explicit NAT Gateway for egress, delegated API server subnet.
+#     explicit NAT Gateway for egress, delegated API server subnet, and a
+#     dedicated system node subnet.
 #   - egress_type = "userAssignedNATGateway": egress through the NAT Gateway
 #     attached to the node subnet (static public IP).
 #   - enable_private_cluster = false: public API server (Entra RBAC only,
@@ -25,24 +29,26 @@ module "aks" {
   # The module derives count from whether these IDs are null, so they must
   # be known at plan time. Pass deterministic IDs and order explicitly
   # (module finding: prefer a boolean input over a null check on an ID).
-  # The identity's subnet rights must exist before the cluster is created.
+  # The identity's VNet rights must exist before the cluster is created.
   depends_on = [
     azapi_resource.snet_nodes,
     azapi_resource.snet_apiserver,
-    azapi_resource.ra_cluster_subnet,
+    azapi_resource.snet_system,
+    azapi_resource.ra_cluster_vnet,
   ]
 
   location              = local.location
   resource_group_name   = "rg-aks-online-demo"
   create_resource_group = false
   cluster_name          = "aks-online-demo"
-  system_node_vm_size   = "Standard_D2s_v5"
+  cluster_sku           = "Automatic"
 
-  enable_byo_vnet              = true
-  external_node_subnet_id      = local.node_subnet_id
-  external_apiserver_subnet_id = local.apiserver_subnet_id
-  egress_type                  = "userAssignedNATGateway"
-  user_assigned_identity_id    = azapi_resource.uami_cluster.id
+  enable_byo_vnet                = true
+  external_node_subnet_id        = local.node_subnet_id
+  external_apiserver_subnet_id   = local.apiserver_subnet_id
+  external_system_node_subnet_id = local.system_node_subnet_id
+  egress_type                    = "userAssignedNATGateway"
+  user_assigned_identity_id      = azapi_resource.uami_cluster.id
 
   enable_app_gateway_for_containers = false
   enable_managed_nginx              = true
