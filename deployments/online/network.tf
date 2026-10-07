@@ -14,8 +14,9 @@ locals {
   rg_id    = "/subscriptions/${data.azapi_client_config.current.subscription_id}/resourceGroups/rg-aks-online-demo"
   vnet_id  = "${local.rg_id}/providers/Microsoft.Network/virtualNetworks/vnet-aks-online-demo"
 
-  node_subnet_id      = "${local.vnet_id}/subnets/snet-aks-nodes"
-  apiserver_subnet_id = "${local.vnet_id}/subnets/snet-aks-apiserver"
+  node_subnet_id        = "${local.vnet_id}/subnets/snet-aks-nodes"
+  apiserver_subnet_id   = "${local.vnet_id}/subnets/snet-aks-apiserver"
+  system_node_subnet_id = "${local.vnet_id}/subnets/snet-aks-system"
 
   tags = {
     Environment        = "Demo"
@@ -159,4 +160,23 @@ resource "azapi_resource" "snet_apiserver" {
 
   # Subnet writes on the same VNet must not run concurrently.
   depends_on = [azapi_resource.snet_nodes]
+}
+
+# AKS Automatic managed system node pools (hostedSystemProfile): dedicated,
+# at least /26, not delegated, separate from the node subnet. Same NSG
+# (the ingress load balancer may target system nodes) and NAT Gateway.
+resource "azapi_resource" "snet_system" {
+  type      = "Microsoft.Network/virtualNetworks/subnets@2024-05-01"
+  name      = "snet-aks-system"
+  parent_id = azapi_resource.vnet.id
+
+  body = {
+    properties = {
+      addressPrefix        = "10.20.4.64/26"
+      networkSecurityGroup = { id = azapi_resource.nsg_nodes.id }
+      natGateway           = { id = azapi_resource.natgw.id }
+    }
+  }
+
+  depends_on = [azapi_resource.snet_apiserver]
 }

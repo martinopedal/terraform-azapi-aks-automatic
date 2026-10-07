@@ -84,15 +84,16 @@ run "cost_analysis_disabled_is_sent_explicitly_to_avoid_drift" {
   }
 }
 
-# Guard for a documented gap (CHANGELOG): this body shape is AKS Standard
-# ("Base") with Automatic-style features. AKS rejects "Automatic" for it
-# (needs Azure Policy, Key Vault secrets provider, ephemeral OS disks and
-# disabled SSH on the system pool). Change only together with that redesign.
+# The default SKU stays "Base" (AKS Standard SKU with Automatic-style
+# features) for existing consumers. The Automatic SKU is opt-in through
+# cluster_sku = "Automatic" (tests/automatic.tftest.hcl); AKS does not
+# migrate an existing Base cluster to Automatic, so switching needs a new
+# cluster.
 run "sku_stays_base_until_automatic_redesign" {
   command = plan
 
   assert {
     condition     = azapi_resource.aks.body.sku.name == "Base" && azapi_resource.aks.body.sku.tier == "Standard"
-    error_message = "Do not switch to the Automatic SKU without the system-pool and add-on redesign; AKS rejects it for this body."
+    error_message = "The default cluster_sku must remain Base; Automatic is opt-in and requires a new cluster."
   }
 }

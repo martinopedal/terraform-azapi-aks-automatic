@@ -786,3 +786,33 @@ variable "acr_zone_redundancy_enabled" {
   type        = bool
   default     = true
 }
+
+variable "cluster_sku" {
+  description = <<-EOT
+    Managed cluster SKU name:
+      - "Base"      : AKS Standard SKU with Automatic-style features (explicit system pool). Default, unchanged.
+      - "Automatic" : AKS Automatic SKU with managed system node pools (hostedSystemProfile). Requires BYO
+                      external subnets, external_system_node_subnet_id, and user_assigned_identity_id with
+                      Network Contributor on the VNet before creation. AKS does not support migrating an
+                      existing Base cluster to Automatic; switching requires a new cluster.
+  EOT
+  type        = string
+  default     = "Base"
+  nullable    = false
+
+  validation {
+    condition     = contains(["Base", "Automatic"], var.cluster_sku)
+    error_message = "cluster_sku must be Base or Automatic."
+  }
+}
+
+variable "external_system_node_subnet_id" {
+  description = "Resource ID of a pre-provisioned subnet for AKS Automatic managed system node pools (hostedSystemProfile.systemNodeSubnetID). Must be in the cluster VNet, at least /26, not delegated, and different from the node subnet. Required when cluster_sku = \"Automatic\"."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.external_system_node_subnet_id == null || can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+/subnets/[^/]+$", var.external_system_node_subnet_id))
+    error_message = "external_system_node_subnet_id must be a valid Azure subnet resource ID."
+  }
+}
