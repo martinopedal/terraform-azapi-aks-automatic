@@ -20,6 +20,13 @@ resource "azapi_resource" "nic" {
   parent_id = local.rg_id
   tags      = local.tags
 
+  # The NIC joins snet-vm while Bastion may be updating AzureBastionSubnet.
+  retry = {
+    error_message_regex  = ["AnotherOperationInProgress", "RetryableError", "ReferencedResourceNotProvisioned"]
+    interval_seconds     = 15
+    max_interval_seconds = 90
+  }
+
   body = {
     properties = {
       ipConfigurations = [{
@@ -78,8 +85,11 @@ resource "azapi_resource" "vm" {
       }
       networkProfile = {
         networkInterfaces = [{
-          id         = azapi_resource.nic.id
-          properties = { primary = true, deleteOption = "Delete" }
+          id = azapi_resource.nic.id
+          # Detach, not Delete: Terraform owns the NIC. With Delete, replacing
+          # the VM (recreate-vm) would delete the NIC behind Terraform's back
+          # and the new VM would fail to reference it.
+          properties = { primary = true, deleteOption = "Detach" }
         }]
       }
       securityProfile = {
@@ -137,6 +147,18 @@ resource "azapi_resource" "aad_login" {
       typeHandlerVersion      = "2.0"
       autoUpgradeMinorVersion = true
     }
+  }
+
+  # Landing-zone DeployIfNotExists policies install their own extensions
+  # right after VM creation; concurrent extension writes return conflicts.
+  retry = {
+    error_message_regex  = ["AnotherOperationInProgress", "OperationNotAllowed", "Conflict", "is in progress", "RetryableError"]
+    interval_seconds     = 20
+    max_interval_seconds = 120
+  }
+
+  timeouts {
+    create = "30m"
   }
 }
 
