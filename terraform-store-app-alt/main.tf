@@ -36,7 +36,7 @@ provider "kubernetes" {
     args = [
       "get-token",
       "--server-id",
-      "6dae42f8-4368-4678-94ff-3960e28e3630",  # Azure Public Cloud AKS AAD Server App ID
+      "6dae42f8-4368-4678-94ff-3960e28e3630", # Azure Public Cloud AKS AAD Server App ID
       "--client-id",
       data.azurerm_client_config.current.client_id,
       "--tenant-id",
