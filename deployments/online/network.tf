@@ -14,9 +14,8 @@ locals {
   rg_id    = "/subscriptions/${data.azapi_client_config.current.subscription_id}/resourceGroups/rg-aks-online-demo"
   vnet_id  = "${local.rg_id}/providers/Microsoft.Network/virtualNetworks/vnet-aks-online-demo"
 
-  node_subnet_id        = "${local.vnet_id}/subnets/snet-aks-nodes"
-  apiserver_subnet_id   = "${local.vnet_id}/subnets/snet-aks-apiserver"
-  system_node_subnet_id = "${local.vnet_id}/subnets/snet-aks-system"
+  node_subnet_id      = "${local.vnet_id}/subnets/snet-aks-nodes"
+  apiserver_subnet_id = "${local.vnet_id}/subnets/snet-aks-apiserver"
 
   tags = {
     Environment        = "Demo"
