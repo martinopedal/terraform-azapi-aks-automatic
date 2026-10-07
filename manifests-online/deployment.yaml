@@ -18,8 +18,11 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1654
-        runAsGroup: 1654
+        # UID/GID above 10000 so they never collide with host system accounts
+        # (Trivy KSV-0020/KSV-0021). The app needs no writable home: the root
+        # filesystem is read-only and /tmp is an emptyDir.
+        runAsUser: 10001
+        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       topologySpreadConstraints:
@@ -32,7 +35,7 @@ spec:
       containers:
         - name: web
           # Public Microsoft sample (ASP.NET Core 10 LTS, Ubuntu chiseled):
-          # distroless, no shell, runs as the non-root "app" user (1654) and
+          # distroless, no shell, runs non-root (UID 10001 set above) and
           # listens on 8080, so no privileged port or capability is needed.
           # Pinned by digest (multi-arch index) for a reproducible deploy.
           image: mcr.microsoft.com/dotnet/samples:aspnetapp-chiseled-10.0@sha256:9628a62d214f693b20697c010ba90288a7b2ba0961ece490526e7a51d5a83877
