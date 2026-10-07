@@ -816,3 +816,9 @@ variable "external_system_node_subnet_id" {
     error_message = "external_system_node_subnet_id must be a valid Azure subnet resource ID."
   }
 }
+
+variable "use_external_subnets" {
+  description = "Set to true when passing external_node_subnet_id and external_apiserver_subnet_id, especially if the caller creates those subnets in the same root (their IDs are unknown until apply, so the module cannot infer the mode at plan time). Null (default) infers the mode from external_node_subnet_id."
+  type        = bool
+  default     = null
+}

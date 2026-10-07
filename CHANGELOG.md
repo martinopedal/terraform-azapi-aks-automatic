@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed `Invalid count argument`** when a caller creates the subnets in the same root: new optional `use_external_subnets` (bool). When set, the module's network `count` no longer depends on subnet IDs that are unknown at plan time; when null, behavior is unchanged (inferred). Regression test `tests/external_subnets.tftest.hcl` uses a caller fixture that reproduces the original error without the flag and passes with it. `deployments/online` now passes real subnet references.
+- **Fixed a scanning blind spot:** Checkov's HCL parser rejected `main.tf` (bare `for` object keys in the Prometheus alert rules), so the cluster definition was never scanned. Keys are now quoted (`"for" = ...`); same semantics, and every `.tf` file parses with Checkov's parser.
+- **Hardened the generic Corp example** (`manifests/`): unprivileged nginx on 8080 pinned by digest, UID/GID 10001, read-only root filesystem, resources and probes (Trivy: 8 findings to 1 documented, scoped exception). Removed a real resource ID from `gateway.yaml`.
+- **Removed real environment data** from the public repo: `env/prod.tfvars` deleted (use `terraform.tfvars.example`), subscription ID removed from workflows. These are identifiers, not credentials; history is not rewritten.
+- **Retired dead workflows** (`deploy.yml`, `apply-store-app.yml`, `apply-store-app-mi.yml`): they target runners and a registry that do not exist. Disabled, annotated, and `deploy.yml`'s missing `needs: plan` fixed.
+
 ## v0.5.0 (2026-10-06)
 
 - `user_assigned_identity_id` is now honored whenever it is set. Previously the cluster used a SystemAssigned identity unless the cluster was private with a custom private DNS zone, so a BYO-VNet cluster with caller-created subnets failed with `OnlySupportedOnUserAssignedMSICluster`. Consumers that do not pass the variable are unaffected. Consumers that passed it without a custom private DNS zone will now get a UserAssigned identity (identity change).

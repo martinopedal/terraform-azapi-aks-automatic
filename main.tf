@@ -283,6 +283,11 @@ resource "azapi_resource" "aks" {
     ]
 
     precondition {
+      condition     = var.use_external_subnets != true || (var.external_node_subnet_id != null && var.external_apiserver_subnet_id != null)
+      error_message = "use_external_subnets = true requires external_node_subnet_id and external_apiserver_subnet_id."
+    }
+
+    precondition {
       condition     = !local.is_automatic || (local.use_external_subnets && var.external_system_node_subnet_id != null)
       error_message = "cluster_sku = Automatic requires external BYO subnets (external_node_subnet_id, external_apiserver_subnet_id) and external_system_node_subnet_id for managed system node pools."
     }
@@ -420,7 +425,7 @@ resource "azapi_resource" "prometheus_alerts" {
           alert      = "KubeNodeNotReady"
           enabled    = true
           expression = "kube_node_status_condition{condition=\"Ready\",status=\"true\"} == 0"
-          for        = "PT5M"
+          "for"      = "PT5M"
           severity   = 1
           labels     = { severity = "critical" }
           annotations = {
@@ -432,7 +437,7 @@ resource "azapi_resource" "prometheus_alerts" {
           alert      = "KubePodCrashLooping"
           enabled    = true
           expression = "increase(kube_pod_container_status_restarts_total[1h]) > 5"
-          for        = "PT15M"
+          "for"      = "PT15M"
           severity   = 2
           labels     = { severity = "high" }
           annotations = {
@@ -444,7 +449,7 @@ resource "azapi_resource" "prometheus_alerts" {
           alert      = "KubePVCAlmostFull"
           enabled    = true
           expression = "kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9"
-          for        = "PT10M"
+          "for"      = "PT10M"
           severity   = 2
           labels     = { severity = "high" }
           annotations = {
@@ -456,7 +461,7 @@ resource "azapi_resource" "prometheus_alerts" {
           alert      = "KubeContainerOOMKilled"
           enabled    = true
           expression = "kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\"} > 0"
-          for        = "PT5M"
+          "for"      = "PT5M"
           severity   = 2
           labels     = { severity = "high" }
           annotations = {
@@ -468,7 +473,7 @@ resource "azapi_resource" "prometheus_alerts" {
           alert      = "KubeDeploymentReplicasMismatch"
           enabled    = true
           expression = "kube_deployment_spec_replicas != kube_deployment_status_ready_replicas"
-          for        = "PT15M"
+          "for"      = "PT15M"
           severity   = 2
           labels     = { severity = "high" }
           annotations = {
@@ -480,7 +485,7 @@ resource "azapi_resource" "prometheus_alerts" {
           alert      = "KubeJobFailed"
           enabled    = true
           expression = "kube_job_status_failed > 0"
-          for        = "PT5M"
+          "for"      = "PT5M"
           severity   = 3
           labels     = { severity = "medium" }
           annotations = {

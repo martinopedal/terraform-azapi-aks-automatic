@@ -14,3 +14,11 @@ misconfigurations:
       trusted-registry list. The Online demo intentionally uses a public,
       Microsoft-published sample image, pinned by digest. Scoped to this file
       only so other manifests still flag untrusted registries.
+  - id: KSV-0125
+    paths:
+      - "manifests/deployment.yaml"
+    statement: >-
+      Generic Corp example uses the public nginx-unprivileged image pinned by
+      digest. A real private Corp cluster must mirror it into its own ACR and
+      override the image in a private kustomize patch (documented in the
+      manifest). Scoped to this file only.

@@ -103,7 +103,7 @@ jobs:
               # Replace the VM and everything Azure deletes with it (extension,
               # auto-shutdown schedule, VM-scoped role assignments), so state
               # and Azure never diverge. The NIC is detached and kept.
-              mapfile -t REPL < <(terraform state list | grep -E '^azapi_resource\.(vm|aad_login|auto_shutdown|ra_vm_admin_login)(\[|$)')
+              mapfile -t REPL < <(terraform state list | grep -E '^azapi_resource\.(vm|aad_login|auto_shutdown|install_pwsh|ra_vm_admin_login)(\[|$)')
               [ "${#REPL[@]}" -gt 0 ] || { echo "::error::No VM in state to recreate; run apply first"; exit 1; }
               for r in "${REPL[@]}"; do ARGS+=("-replace=$r"); done
               printf 'Replacing: %s\n' "${REPL[@]}" ;;
@@ -156,6 +156,8 @@ jobs:
           # az resource show needs no CLI extension (az network bastion does).
           BAS=$(az resource show -g $RG -n bas-demo-copilot --resource-type Microsoft.Network/bastionHosts --query "join(' ', [properties.provisioningState, to_string(properties.enableTunneling), sku.name])" -o tsv)
           EXTS=$(az vm extension list -g $RG --vm-name $VM --query "join(', ', [].name)" -o tsv)
+          PWSH_STATE=$(az vm run-command show -g $RG --vm-name $VM --run-command-name install-pwsh7 --instance-view --query "instanceView.executionState" -o tsv)
+          PWSH_OUT=$(az vm run-command show -g $RG --vm-name $VM --run-command-name install-pwsh7 --instance-view --query "instanceView.output" -o tsv | grep -o 'pwsh version: [0-9.]*' || true)
           {
             echo "### Demo VM"
             echo "| Check | Result |"
@@ -167,6 +169,7 @@ jobs:
             echo "| NSG inbound allows from Internet/* | $OPEN |"
             echo "| Bastion (state, tunneling, SKU) | $BAS |"
             echo "| VM extensions (incl. landing-zone policy) | $EXTS |"
+            echo "| PowerShell 7 prerequisite | $PWSH_STATE / ${PWSH_OUT:-no output} |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$POWER" = "VM running" ] || { echo "::error::VM is not running"; exit 1; }
           [ "$AAD" = "Succeeded" ] || { echo "::error::Entra login extension not ready: $AAD"; exit 1; }
@@ -174,3 +177,4 @@ jobs:
           [ -z "$PIP" ] || { echo "::error::VM NIC has a public IP"; exit 1; }
           [ "$OPEN" = "0" ] || { echo "::error::VM NSG allows inbound from the internet"; exit 1; }
           [ "$BAS" = "Succeeded true Standard" ] || { echo "::error::Bastion not ready or tunneling disabled: $BAS"; exit 1; }
+          [ "$PWSH_STATE" = "Succeeded" ] && [ "$PWSH_OUT" = "pwsh version: 7.6.6" ] || { echo "::error::PowerShell 7.6.6 prerequisite not installed: $PWSH_STATE $PWSH_OUT"; exit 1; }

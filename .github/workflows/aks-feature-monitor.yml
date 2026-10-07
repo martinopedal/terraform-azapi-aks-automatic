@@ -25,7 +25,8 @@ jobs:
       - name: Run AKS Feature Scan
         id: scan
         run: |
-          node .github/extensions/aks-feature-tracker/extension.mjs > scan-output.json 2>&1 || true
+          # Pure scanner (no Copilot SDK); fails the job on error instead of hiding it.
+          node .github/extensions/aks-feature-tracker/scan.mjs . > scan-output.json
           cat scan-output.json
 
       - name: Compare Against Baseline
@@ -47,8 +48,7 @@ jobs:
             try {
               scan = JSON.parse(fs.readFileSync('scan-output.json', 'utf8'));
             } catch (e) {
-              core.info('Scan output is not valid JSON, skipping comparison.');
-              core.setOutput('changed', 'false');
+              core.setFailed('Scan output is not valid JSON: ' + e.message);
               return;
             }
 

@@ -4,7 +4,7 @@ metadata:
   name: store-app-gateway
   namespace: store-app
   annotations:
-    alb.networking.azure.io/alb-id: /subscriptions/147f910d-d9c8-40ca-8455-2ea5219765e5/resourceGroups/rg-sreagt-dmo-swc-001/providers/Microsoft.ServiceNetworking/trafficControllers/tc-sreagt-store-dmo-swc-001
+    alb.networking.azure.io/alb-id: /subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.ServiceNetworking/trafficControllers/<agc-name>  # set in your private consumer (kustomize patch)
     alb.networking.azure.io/alb-frontend: fe-public-001
 spec:
   gatewayClassName: azure-alb-external

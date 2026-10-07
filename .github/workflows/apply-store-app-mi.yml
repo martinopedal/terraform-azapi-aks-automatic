@@ -1,5 +1,13 @@
 name: "Apply Store App Manifests (Managed Identity)"
 
+# =============================================================================
+# RETIRED (October 2026): this workflow targets self-hosted runners labelled
+# [self-hosted, linux, demo-private, sub9] that do not exist, a private ACR
+# that does not exist, and a repo-root Terraform configuration without
+# provider blocks. It has never deployed successfully and is disabled in
+# GitHub Actions. The working, validated pattern is deploy-online.yml with a
+# thin root under deployments/ (see README Scenario 8). Kept for reference.
+# =============================================================================
 on:
   workflow_dispatch:
     inputs:
@@ -27,7 +35,7 @@ jobs:
           echo "Logging in with managed identity..."
           az login --identity
           az account show
-          az account set --subscription 147f910d-d9c8-40ca-8455-2ea5219765e5
+          az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID_DEMO }}
 
       - name: Install kubectl and kubelogin
         run: |
