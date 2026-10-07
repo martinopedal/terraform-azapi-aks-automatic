@@ -84,20 +84,64 @@ resource "kubernetes_deployment_v1" "store_app" {
 
       spec {
         container {
-          name  = "nginx"
-          image = "nginxinc/nginx-unprivileged:latest"
+          name = "nginx"
+          # Stable line, pinned by multi-arch index digest (reproducible, no :latest).
+          image = "nginxinc/nginx-unprivileged:1.30.5-alpine@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3"
 
           port {
             name           = "http"
             container_port = 8080
           }
 
+          resources {
+            requests = {
+              cpu    = "50m"
+              memory = "64Mi"
+            }
+            limits = {
+              cpu    = "250m"
+              memory = "128Mi"
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/"
+              port = "http"
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/"
+              port = "http"
+            }
+            initial_delay_seconds = 15
+            period_seconds        = 20
+          }
+
           security_context {
             allow_privilege_escalation = false
             run_as_non_root            = true
+            read_only_root_filesystem  = true
             capabilities {
               drop = ["ALL"]
             }
+          }
+
+          # nginx-unprivileged writes its pid file and temp paths under /tmp.
+          volume_mount {
+            name       = "tmp"
+            mount_path = "/tmp"
+          }
+        }
+
+        volume {
+          name = "tmp"
+          empty_dir {
+            size_limit = "64Mi"
           }
         }
       }
